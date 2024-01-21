@@ -1,34 +1,43 @@
-use std::sync::mpsc::{Sender};
+use futures::{
+    channel::mpsc::{channel, Receiver},
+    SinkExt, StreamExt,
+};
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use std::path::Path;
 
-use notify::{RecursiveMode, Watcher};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult};
-use std::{path::Path, time::Duration};
 
-pub struct FileWatcher {}
+pub fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
+    let (mut tx, rx) = channel(1);
 
-impl FileWatcher {
-    pub fn run(&self, path: String, sender: Sender<DebounceEventResult>) -> notify::Result<()> {
-        // Create a new debounced file watcher with a timeout of 2 seconds.
-        // The tickrate will be selected automatically, as well as the underlying watch implementation.
-        let mut debouncer = new_debouncer(Duration::from_secs(2), None, sender)?;
-        let path = Path::new(&path);
+    // Automatically select the best implementation for your platform.
+    // You can also access each implementation directly e.g. INotifyWatcher.
+    let watcher = RecommendedWatcher::new(
+        move |res| {
+            futures::executor::block_on(async {
+                tx.send(res).await.unwrap();
+            })
+        },
+        Config::default(),
+    )?;
 
-        // Add a path to be watched. All files and directories at that path and
-        // below will be monitored for changes.
-        debouncer
-            .watcher()
-            .watch(path, RecursiveMode::Recursive)?;
+    Ok((watcher, rx))
+}
 
-        // Initialize the file id cache for the same path. This will allow the debouncer to stitch together move events,
-        // even if the underlying watch implementation doesn't support it.
-        // Without the cache and with some watch implementations,
-        // you may receive `move from` and `move to` events instead of one `move both` event.
-        debouncer
-            .cache()
-            .add_root(path, RecursiveMode::Recursive);
+async fn async_watch<P: AsRef<Path>>(path: P) -> notify::Result<()> {
+    let (mut watcher, mut rx) = async_watcher()?;
 
-        Ok(())
+    // Add a path to be watched. All files and directories at that path and
+    // below will be monitored for changes.
+    watcher.watch(path.as_ref(), RecursiveMode::Recursive)?;
+
+    while let Some(res) = rx.next().await {
+        match res {
+            Ok(event) => println!("changed: {:?}", event),
+            Err(e) => println!("watch error: {:?}", e),
+        }
     }
+
+    Ok(())
 }
 
 #[cfg(test)]

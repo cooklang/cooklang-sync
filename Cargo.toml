@@ -14,3 +14,4 @@ futures = "0.3.30"
 notify = "6.1.1"
 notify-debouncer-full = "0.3.1"
 rusqlite = { version = "0.30.0", features = ["bundled"] }
+tokio = { version = "1.35.1", features = ["time", "full"] }

@@ -18,9 +18,9 @@ use crate::chunker::{Chunker, InMemoryCache};
 use crate::local_db::{LocalDB};
 
 
-
 pub async fn run(storage_dir: String, db_file_path: String, remote_token: String) -> notify::Result<()> {
-    let (mut watcher, mut rx) = async_watcher()?;
+    let (mut watcher, mut local_file_update_rx) = async_watcher()?;
+    let (mut local_base_updated_tx, mut local_base_updated_rx) = channel(100);
 
     let mut chunk_cache = InMemoryCache::new();
     let mut chunker = Chunker::new(chunk_cache);
@@ -35,12 +35,7 @@ pub async fn run(storage_dir: String, db_file_path: String, remote_token: String
 
     watcher.watch(watch_path.as_ref(), RecursiveMode::Recursive)?;
 
-    crate::indexer::run(indexer_path, rx).await;
-
-
-    // let indexer_thread = std::thread::spawn(move ||{
-    //     indexer.run(indexer_path, rx);
-    // });
+    crate::indexer::run(indexer_path, local_file_update_rx, local_base_updated_tx).await;
 
     // let syncer_upload_thread = std::thread::spawn({
     //     syncer.run_upload();

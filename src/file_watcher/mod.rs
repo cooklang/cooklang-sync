@@ -7,7 +7,7 @@ use std::path::Path;
 
 
 pub fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
-    let (mut tx, rx) = channel(1);
+    let (mut tx, rx) = channel(1000);
 
     // Automatically select the best implementation for your platform.
     // You can also access each implementation directly e.g. INotifyWatcher.

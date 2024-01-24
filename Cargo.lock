@@ -147,6 +147,7 @@ dependencies = [
  "notify",
  "notify-debouncer-full",
  "rusqlite",
+ "time",
  "tokio",
 ]
 

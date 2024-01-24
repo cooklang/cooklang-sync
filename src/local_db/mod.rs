@@ -1,38 +1,50 @@
-use diesel::sqlite::SqliteConnection;
+use diesel::insert_into;
 use diesel::prelude::*;
+use diesel::sqlite::SqliteConnection;
+use diesel::OptionalExtension;
 
 use crate::models::*;
+use crate::schema::file_records::dsl::*;
 
 pub struct LocalDB {
-    connection: SqliteConnection
+    connection: SqliteConnection,
 }
 
 impl LocalDB {
-
-    pub fn new(database_url: String) -> LocalDB {
-        let connection = SqliteConnection::establish(&database_url)
-            .unwrap_or_else(|_| panic!("Error connecting to {}", database_url));
+    pub fn new(database_url: &str) -> LocalDB {
+        let connection = SqliteConnection::establish(database_url)
+            .unwrap_or_else(|_| panic!("Error connecting to database"));
 
         LocalDB { connection }
     }
 
-    fn query_file_record(&self) -> Vec<FileRecord>{
+    pub fn query_file_record(&mut self) -> Vec<FileRecord> {
         todo!()
     }
 
-    fn create_file_record(&self, create_form: &CreateForm) -> FileRecord {
+    pub fn create_file_record(
+        &mut self,
+        create_form: FileRecordCreateForm,
+    ) -> Result<usize, diesel::result::Error> {
+        println!("inserting into {:?}", create_form);
+        insert_into(file_records)
+            .values(create_form)
+            .execute(&mut self.connection)
+    }
+
+    pub fn update_file_record(&mut self, _update_form: FileRecordUpdateForm) -> FileRecord {
         todo!()
     }
 
-    fn update_file_record(&self, update_form: &UpdateForm) -> FileRecord {
-        todo!()
-    }
-
-    fn latest_file_record(&self, path: String) -> FileRecord {
-        todo!()
+    pub fn latest_file_record(&mut self, file_path: String) -> Option<FileRecord> {
+        file_records
+            .filter(path.eq(file_path))
+            .select(FileRecord::as_select())
+            .order(id.desc())
+            .first::<FileRecord>(&mut self.connection)
+            .optional()
+            .unwrap()
     }
 
     // no delete on purpose
-
-
 }

@@ -1,0 +1,18 @@
+diff --git a/src/schema.rs b/src/schema.rs
+index af48424..a7f0ff0 100644
+--- a/src/schema.rs
++++ b/src/schema.rs
+@@ -3,11 +3,11 @@
+ diesel::table! {
+     file_records (id) {
+         id -> Integer,
+         jid -> Nullable<Integer>,
+         path -> Text,
+         format -> Text,
+-        modified_at -> Nullable<Timestamp>,
++        modified_at -> Nullable<TimestamptzSqlite>,
+         size -> Nullable<BigInt>,
+-        created_at -> Timestamp,
++        created_at -> TimestamptzSqlite,
+     }
+ }

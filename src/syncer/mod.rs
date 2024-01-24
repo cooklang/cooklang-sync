@@ -1,10 +1,8 @@
-
 // mod remote;
 
 // pub struct Syncer {
 
 // }
-
 
 // impl Syncer {
 
@@ -106,7 +104,6 @@
 //     }
 
 // }
-
 
 // #[cfg(test)]
 // mod tests {

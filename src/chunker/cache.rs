@@ -1,12 +1,10 @@
-
-use std::io::{self};
 use std::collections::HashMap;
-
+use std::io::{self};
 
 pub trait Cache {
-    fn get_chunk(&self, chunk_hash: &String) -> io::Result<String>;
+    fn get_chunk(&self, chunk_hash: &str) -> io::Result<String>;
     fn set_chunk(&mut self, chunk_hash: String, content: String) -> io::Result<()>;
-    fn contains_chunk(&self, chunk_hash: &String) -> bool;
+    fn contains_chunk(&self, chunk_hash: &str) -> bool;
 }
 
 pub struct InMemoryCache {
@@ -21,11 +19,20 @@ impl InMemoryCache {
     }
 }
 
+impl Default for InMemoryCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cache for InMemoryCache {
-    fn get_chunk(&self, chunk_hash: &String) -> io::Result<String> {
+    fn get_chunk(&self, chunk_hash: &str) -> io::Result<String> {
         match self.cache.get(chunk_hash) {
             Some(content) => Ok(content.clone()),
-            None => Err(io::Error::new(io::ErrorKind::NotFound, "Chunk not found in cache")),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Chunk not found in cache",
+            )),
         }
     }
 
@@ -34,11 +41,10 @@ impl Cache for InMemoryCache {
         Ok(())
     }
 
-    fn contains_chunk(&self, chunk_hash: &String) -> bool {
+    fn contains_chunk(&self, chunk_hash: &str) -> bool {
         self.cache.contains_key(chunk_hash)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

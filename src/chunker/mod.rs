@@ -1,7 +1,7 @@
-use std::fs::{File};
+use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
-use blake3::{Hasher};
+use blake3::Hasher;
 
 mod cache;
 
@@ -68,7 +68,7 @@ impl<C: Cache> Chunker<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cache::{InMemoryCache};
+    use cache::InMemoryCache;
     use std::fs::File;
     use std::io::Write;
 
@@ -85,7 +85,7 @@ mod tests {
         let hashes = chunker.hashify("tmp/test.txt".to_string()).unwrap();
 
         assert_eq!(hashes.len(), 2); // Ensure two lines are hashed
-        // Further asserts can be added to check specific hash values
+                                     // Further asserts can be added to check specific hash values
     }
 
     #[test]
@@ -94,7 +94,9 @@ mod tests {
         create_test_file("tmp/test_chunk.txt", "Chunk content");
 
         let hash = chunker.hashify("tmp/test_chunk.txt".to_string()).unwrap()[0].clone();
-        chunker.save_chunk(hash.clone(), "Chunk content".to_string()).unwrap();
+        chunker
+            .save_chunk(hash.clone(), "Chunk content".to_string())
+            .unwrap();
 
         let save_result = chunker.save("test_save.txt".to_string(), vec![hash]);
         assert!(save_result.is_ok()); // Check if file is saved without errors
@@ -106,7 +108,9 @@ mod tests {
         let chunk_hash = "some_hash_string".to_string();
         let chunk_content = "some content".to_string();
 
-        chunker.save_chunk(chunk_hash.clone(), chunk_content.clone()).unwrap();
+        chunker
+            .save_chunk(chunk_hash.clone(), chunk_content.clone())
+            .unwrap();
         let result = chunker.read_chunk(chunk_hash).unwrap();
 
         assert_eq!(result, chunk_content); // Check if the content matches
@@ -118,7 +122,9 @@ mod tests {
         let chunk_hash = "some_hash_string".to_string();
         let chunk_content = "some content".to_string();
 
-        chunker.save_chunk(chunk_hash.clone(), chunk_content.clone()).unwrap();
+        chunker
+            .save_chunk(chunk_hash.clone(), chunk_content.clone())
+            .unwrap();
 
         assert!(chunker.cache.contains_chunk(&chunk_hash)); // Check if the chunk is saved
     }
@@ -140,8 +146,12 @@ mod tests {
         let chunk_hash = "some_hash_string".to_string();
         let chunk_content = "some content".to_string();
 
-        chunker.save_chunk(chunk_hash.clone(), chunk_content).unwrap();
+        chunker
+            .save_chunk(chunk_hash.clone(), chunk_content)
+            .unwrap();
         assert!(chunker.check_chunk(chunk_hash.clone()).unwrap()); // Check if chunk exists
-        assert!(!chunker.check_chunk("non_existent_hash".to_string()).unwrap()); // Check for non-existent chunk
+        assert!(!chunker
+            .check_chunk("non_existent_hash".to_string())
+            .unwrap()); // Check for non-existent chunk
     }
 }

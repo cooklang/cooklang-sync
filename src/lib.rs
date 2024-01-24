@@ -1,30 +1,29 @@
 pub mod chunker;
-pub mod indexer;
-pub mod syncer;
-pub mod local_db;
 pub mod file_watcher;
+pub mod indexer;
+pub mod local_db;
 pub mod models;
 pub mod schema;
+pub mod syncer;
 
+use notify::{RecursiveMode, Watcher};
 
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::Path;
-use futures::{
-    channel::mpsc::{channel, Receiver},
-    SinkExt, StreamExt,
-};
-use crate::file_watcher::async_watcher;
 use crate::chunker::{Chunker, InMemoryCache};
-use crate::local_db::{LocalDB};
+use crate::file_watcher::async_watcher;
+use crate::local_db::LocalDB;
+use futures::channel::mpsc::channel;
 
+pub async fn run(
+    storage_dir: String,
+    db_file_path: String,
+    _remote_token: String,
+) -> notify::Result<()> {
+    let (mut watcher, local_file_update_rx) = async_watcher()?;
+    let (local_base_updated_tx, _local_base_updated_rx) = channel(100);
 
-pub async fn run(storage_dir: String, db_file_path: String, remote_token: String) -> notify::Result<()> {
-    let (mut watcher, mut local_file_update_rx) = async_watcher()?;
-    let (mut local_base_updated_tx, mut local_base_updated_rx) = channel(100);
-
-    let mut chunk_cache = InMemoryCache::new();
-    let mut chunker = Chunker::new(chunk_cache);
-    let mut db = LocalDB::new(db_file_path);
+    let chunk_cache = InMemoryCache::new();
+    let _chunker = Chunker::new(chunk_cache);
+    let db = &mut LocalDB::new(&db_file_path);
 
     // let mut indexer = Indexer::new(db);
     // let mut remote = Remote(token);
@@ -35,7 +34,13 @@ pub async fn run(storage_dir: String, db_file_path: String, remote_token: String
 
     watcher.watch(watch_path.as_ref(), RecursiveMode::Recursive)?;
 
-    crate::indexer::run(indexer_path, local_file_update_rx, local_base_updated_tx).await;
+    crate::indexer::run(
+        db,
+        indexer_path,
+        local_file_update_rx,
+        local_base_updated_tx,
+    )
+    .await;
 
     // let syncer_upload_thread = std::thread::spawn({
     //     syncer.run_upload();
@@ -55,4 +60,3 @@ pub async fn run(storage_dir: String, db_file_path: String, remote_token: String
 
     Ok(())
 }
-

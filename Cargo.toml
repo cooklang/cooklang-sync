@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 blake3 = "1.5.0"
 camino = "1.1.6"
-diesel = { version = "2.1.4", features = ["sqlite", "time"] }
+diesel = { version = "2.1.4", features = ["sqlite", "time", "r2d2"] }
 digest = "0.10.7"
 futures = "0.3.30"
 notify = "6.1.1"

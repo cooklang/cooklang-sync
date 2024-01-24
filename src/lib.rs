@@ -10,20 +10,15 @@ use notify::{RecursiveMode, Watcher};
 
 use crate::chunker::{Chunker, InMemoryCache};
 use crate::file_watcher::async_watcher;
-use crate::local_db::LocalDB;
 use futures::channel::mpsc::channel;
 
-pub async fn run(
-    storage_dir: String,
-    db_file_path: String,
-    _remote_token: String,
-) -> notify::Result<()> {
+pub async fn run(storage_dir: &str, db_file_path: &str, _remote_token: &str) -> notify::Result<()> {
     let (mut watcher, local_file_update_rx) = async_watcher()?;
     let (local_base_updated_tx, _local_base_updated_rx) = channel(100);
 
     let chunk_cache = InMemoryCache::new();
     let _chunker = Chunker::new(chunk_cache);
-    let db = &mut LocalDB::new(&db_file_path);
+    let pool = local_db::get_connection_pool(db_file_path);
 
     // let mut indexer = Indexer::new(db);
     // let mut remote = Remote(token);
@@ -35,7 +30,7 @@ pub async fn run(
     watcher.watch(watch_path.as_ref(), RecursiveMode::Recursive)?;
 
     crate::indexer::run(
-        db,
+        pool,
         indexer_path,
         local_file_update_rx,
         local_base_updated_tx,

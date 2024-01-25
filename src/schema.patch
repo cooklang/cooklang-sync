@@ -1,8 +1,8 @@
 diff --git a/src/schema.rs b/src/schema.rs
-index af48424..a7f0ff0 100644
+index 172b50f..da8692d 100644
 --- a/src/schema.rs
 +++ b/src/schema.rs
-@@ -3,11 +3,11 @@
+@@ -3,10 +3,10 @@
  diesel::table! {
      file_records (id) {
          id -> Integer,

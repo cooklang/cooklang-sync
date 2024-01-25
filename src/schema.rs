@@ -7,6 +7,6 @@ diesel::table! {
         path -> Text,
         format -> Text,
         modified_at -> Nullable<TimestamptzSqlite>,
-        size -> Nullable<BigInt>
+        size -> Nullable<BigInt>,
     }
 }

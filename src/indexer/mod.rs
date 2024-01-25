@@ -1,8 +1,10 @@
 use futures::channel::mpsc::{Receiver, Sender};
 use futures::{join, StreamExt};
-use notify::Event;
 use std::fs::{self, Metadata};
 use std::path::Path;
+
+use notify::Event;
+use tokio::time::Duration;
 use time::OffsetDateTime;
 
 use diesel::r2d2::{ConnectionManager, Pool};
@@ -13,7 +15,7 @@ use log::{debug, error};
 use crate::local_db::*;
 use crate::models::{FileRecordCreateForm, FileRecordFilterForm};
 
-const CHECK_INTERVAL_WAIT_SEC: tokio::time::Duration = tokio::time::Duration::from_secs(60);
+const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(60);
 
 pub async fn run(
     pool: &Pool<ConnectionManager<SqliteConnection>>,
@@ -30,7 +32,7 @@ pub async fn run(
         }
     };
 
-    let monitor_updates = async move {
+    let monitor_watcher_updates = async move {
         while let Some(res) = local_file_update_rx.next().await {
             match res {
                 Ok(event) => {
@@ -50,7 +52,7 @@ pub async fn run(
         }
     };
 
-    join!(check_on_interval, monitor_updates);
+    join!(check_on_interval, monitor_watcher_updates);
 }
 
 fn visit_dirs(dir: &Path, pool: &Pool<ConnectionManager<SqliteConnection>>) -> std::io::Result<()> {
@@ -68,6 +70,7 @@ fn visit_dirs(dir: &Path, pool: &Pool<ConnectionManager<SqliteConnection>>) -> s
             }
         }
     }
+
     Ok(())
 }
 
@@ -76,9 +79,7 @@ fn compare_and_update(
     metadata: Metadata,
     pool: &Pool<ConnectionManager<SqliteConnection>>,
 ) -> Result<usize, diesel::result::Error> {
-    let _now = OffsetDateTime::now_utc();
     let path = &path.clone().to_str().expect("oops").to_string();
-    let _search_path = path.clone();
     let file_record = &FileRecordCreateForm {
         path,
         size: Some(metadata.len() as i64),

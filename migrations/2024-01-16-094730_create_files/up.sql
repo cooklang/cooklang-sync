@@ -4,6 +4,5 @@ CREATE TABLE file_records (
   path VARCHAR NOT NULL, -- relative to storage dir
   format CHARACTER(1) NOT NULL,
   modified_at DATETIME,
-  size BIGINT,
-  created_at DATETIME NOT NULL
+  size BIGINT
 )

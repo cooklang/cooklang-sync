@@ -1,55 +1,51 @@
-use futures::{
-    channel::mpsc::{Receiver, Sender},
-    join, StreamExt,
-};
+use futures::channel::mpsc::{Receiver, Sender};
+use futures::{join, StreamExt};
 use notify::Event;
 use std::fs::{self, Metadata};
 use std::path::Path;
 use time::OffsetDateTime;
 
-use diesel::r2d2::ConnectionManager;
-use diesel::r2d2::Pool;
+use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::sqlite::SqliteConnection;
 
+use log::{debug, error};
+
 use crate::local_db::*;
-use crate::models::FileRecordCreateForm;
+use crate::models::{FileRecordCreateForm, FileRecordFilterForm};
+
+const CHECK_INTERVAL_WAIT_SEC: tokio::time::Duration = tokio::time::Duration::from_secs(60);
 
 pub async fn run(
-    pool: Pool<ConnectionManager<SqliteConnection>>,
-    path: &str,
+    pool: &Pool<ConnectionManager<SqliteConnection>>,
+    path: &Path,
     mut local_file_update_rx: Receiver<Result<Event, notify::Error>>,
     _local_db_record_updated_tx: Sender<()>,
 ) {
-    let duration = tokio::time::Duration::from_secs(60);
-    let path = Path::new(path);
-
-    let interval_pool = pool.clone();
     let check_on_interval = async move {
         loop {
-            visit_dirs(path, &interval_pool).expect("Directory traversal failed");
+            visit_dirs(path, pool).expect("Directory traversal failed");
 
             // local_db_record_updated_tx.send(()).await;
-            tokio::time::sleep(duration).await;
+            tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC).await;
         }
     };
 
     let monitor_updates = async move {
-        let pool = pool.clone();
         while let Some(res) = local_file_update_rx.next().await {
             match res {
                 Ok(event) => {
-                    println!("changed: {:?}", event);
+                    debug!("changed: {:?}", event);
 
                     for p in event.paths {
                         if let Some(ext) = p.extension() {
                             if ext == "cook" {
                                 let metadata = p.metadata().unwrap();
-                                compare_and_update(path, metadata, &pool);
+                                let _ = compare_and_update(path, metadata, pool);
                             }
                         }
                     }
                 }
-                Err(e) => println!("watch error: {:?}", e),
+                Err(e) => error!("watch error: {:?}", e),
             }
         }
     };
@@ -67,7 +63,7 @@ fn visit_dirs(dir: &Path, pool: &Pool<ConnectionManager<SqliteConnection>>) -> s
             } else if let Some(ext) = path.extension() {
                 if ext == "cook" {
                     let metadata = entry.metadata()?;
-                    compare_and_update(&path, metadata, pool);
+                    let _ = compare_and_update(&path, metadata, pool);
                 }
             }
         }
@@ -79,32 +75,29 @@ fn compare_and_update(
     path: &Path,
     metadata: Metadata,
     pool: &Pool<ConnectionManager<SqliteConnection>>,
-) {
-    let now = OffsetDateTime::now_utc();
-    let path = path.clone().to_str().expect("oops").to_string();
-    let search_path = path.clone();
-    let file_record = FileRecordCreateForm {
-        path: &path,
+) -> Result<usize, diesel::result::Error> {
+    let _now = OffsetDateTime::now_utc();
+    let path = &path.clone().to_str().expect("oops").to_string();
+    let _search_path = path.clone();
+    let file_record = &FileRecordCreateForm {
+        path,
         size: Some(metadata.len() as i64),
         format: "t",
         modified_at: Some(OffsetDateTime::from(metadata.modified().unwrap())),
-        created_at: now,
     };
 
     let conn = &mut pool.get().unwrap();
 
-    match latest_file_record(conn, search_path) {
-        Some(record_in_db) => {
-            if record_in_db != file_record {
-                let r = create_file_record(conn, file_record);
+    let filter_form = &FileRecordFilterForm { path };
 
-                println!("res {:?}", r);
+    match latest_file_record(conn, filter_form) {
+        Some(record_in_db) => {
+            if &record_in_db != file_record {
+                create_file_record(conn, file_record)
+            } else {
+                Ok(0)
             }
         }
-        None => {
-            let r = create_file_record(conn, file_record);
-
-            println!("res {:?}", r);
-        }
+        None => create_file_record(conn, file_record),
     }
 }

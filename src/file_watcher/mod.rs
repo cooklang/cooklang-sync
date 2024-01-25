@@ -4,8 +4,10 @@ use futures::{
 };
 use notify::{Config, Event, RecommendedWatcher, Watcher};
 
+const CHANNEL_SIZE: usize = 1000;
+
 pub fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
-    let (mut tx, rx) = channel(1000);
+    let (mut tx, rx) = channel(CHANNEL_SIZE);
 
     // Automatically select the best implementation for your platform.
     // You can also access each implementation directly e.g. INotifyWatcher.

@@ -12,7 +12,5 @@ index af48424..a7f0ff0 100644
 -        modified_at -> Nullable<Timestamp>,
 +        modified_at -> Nullable<TimestamptzSqlite>,
          size -> Nullable<BigInt>,
--        created_at -> Timestamp,
-+        created_at -> TimestamptzSqlite,
      }
  }

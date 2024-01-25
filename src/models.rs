@@ -12,7 +12,6 @@ pub struct FileRecord {
     pub format: String,
     pub size: Option<i64>,
     pub modified_at: Option<OffsetDateTime>,
-    pub created_at: OffsetDateTime,
 }
 
 #[derive(Insertable, Debug)]
@@ -23,7 +22,6 @@ pub struct FileRecordCreateForm<'a> {
     pub format: &'a str,
     pub size: Option<i64>,
     pub modified_at: Option<OffsetDateTime>,
-    pub created_at: OffsetDateTime,
 }
 
 #[derive(AsChangeset, Debug)]
@@ -32,6 +30,13 @@ pub struct FileRecordCreateForm<'a> {
 pub struct FileRecordUpdateForm {
     pub size: Option<i64>,
     pub modified_at: Option<OffsetDateTime>,
+}
+
+#[derive(AsChangeset, Debug)]
+#[diesel(table_name = file_records)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct FileRecordFilterForm<'a> {
+    pub path: &'a str,
 }
 
 impl PartialEq<FileRecordCreateForm<'_>> for FileRecord {

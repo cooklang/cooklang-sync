@@ -2,17 +2,13 @@ use cooklang_sync::run;
 use std::env;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), cooklang_sync::errors::MyError> {
     let args: Vec<String> = env::args().collect();
-
     if args.len() > 1 {
-        let first_arg = &args[1]; // Get the first argument
-        futures::executor::block_on(async {
-            if let Err(e) = run(first_arg, "./mydb.sqlite3", "token").await {
-                println!("error: {:?}", e)
-            }
-        });
+        let first_arg = &args[1];
+        run(first_arg, "./mydb.sqlite3", "token").await?;
     } else {
         println!("No arguments were provided.");
     }
+    Ok(())
 }

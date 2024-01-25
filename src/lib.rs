@@ -5,6 +5,7 @@ pub mod local_db;
 pub mod models;
 pub mod schema;
 pub mod syncer;
+pub mod errors;
 
 use notify::{RecursiveMode, Watcher};
 
@@ -12,7 +13,7 @@ use crate::chunker::{Chunker, InMemoryCache};
 use crate::file_watcher::async_watcher;
 use futures::channel::mpsc::channel;
 
-pub async fn run(storage_dir: &str, db_file_path: &str, _remote_token: &str) -> notify::Result<()> {
+pub async fn run(storage_dir: &str, db_file_path: &str, _remote_token: &str) -> Result<(), errors::MyError> {
     let (mut watcher, local_file_update_rx) = async_watcher()?;
     let (local_base_updated_tx, _local_base_updated_rx) = channel(100);
 

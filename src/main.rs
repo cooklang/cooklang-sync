@@ -1,6 +1,5 @@
 use cooklang_sync::run;
 
-
 #[tokio::main]
 async fn main() -> Result<(), cooklang_sync::errors::SyncError> {
     env_logger::init();

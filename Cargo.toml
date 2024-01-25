@@ -18,3 +18,4 @@ notify-debouncer-full = "0.3.1"
 rusqlite = { version = "0.30.0", features = ["bundled"] }
 time = { version = "0.3.31", features = ["std"] }
 tokio = { version = "1.35.1", features = ["time", "full"] }
+walkdir = "2.4.0"

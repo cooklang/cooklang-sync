@@ -2,7 +2,7 @@ use crate::schema::file_records;
 use diesel::prelude::*;
 use time::OffsetDateTime;
 
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Debug)]
+#[derive(Queryable, Selectable, Identifiable, AsChangeset, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecord {
@@ -10,36 +10,36 @@ pub struct FileRecord {
     pub jid: Option<i32>,
     pub path: String,
     pub format: String,
-    pub size: Option<i64>,
-    pub modified_at: Option<OffsetDateTime>,
+    pub size: i64,
+    pub modified_at: OffsetDateTime,
 }
 
-#[derive(Insertable, Debug)]
+#[derive(Insertable, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-pub struct FileRecordCreateForm<'a> {
-    pub path: &'a str,
-    pub format: &'a str,
-    pub size: Option<i64>,
-    pub modified_at: Option<OffsetDateTime>,
+pub struct FileRecordCreateForm {
+    pub path: String,
+    pub format: String,
+    pub size: i64,
+    pub modified_at: OffsetDateTime,
 }
 
-#[derive(AsChangeset, Debug)]
+#[derive(AsChangeset, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordUpdateForm {
-    pub size: Option<i64>,
-    pub modified_at: Option<OffsetDateTime>,
+    pub size: i64,
+    pub modified_at: OffsetDateTime,
 }
 
-#[derive(AsChangeset, Debug)]
+#[derive(AsChangeset, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordFilterForm<'a> {
     pub path: &'a str,
 }
 
-impl PartialEq<FileRecordCreateForm<'_>> for FileRecord {
+impl PartialEq<FileRecordCreateForm> for FileRecord {
     fn eq(&self, other: &FileRecordCreateForm) -> bool {
         self.path == other.path
             && self.format == other.format

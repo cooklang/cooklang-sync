@@ -214,6 +214,7 @@ dependencies = [
  "rusqlite",
  "time",
  "tokio",
+ "walkdir",
 ]
 
 [[package]]

@@ -1,12 +1,11 @@
 use diesel::insert_into;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use diesel::OptionalExtension;
 
 use diesel::r2d2::ConnectionManager;
 use diesel::r2d2::Pool;
 
-use log::{debug};
+use log::debug;
 
 use crate::models::*;
 use crate::schema::file_records::dsl::*;
@@ -28,23 +27,15 @@ pub fn create_file_record(
     insert_into(file_records).values(create_form).execute(conn)
 }
 
-// pub fn update_file_record(
-//     _conn: &mut SqliteConnection,
-//     _update_form: FileRecordUpdateForm,
-// ) -> FileRecord {
-//     todo!()
-// }
-
 // TODO: use filter form, not only path
-pub fn latest_file_record(
+pub fn latest_file_records(
     conn: &mut SqliteConnection,
-    filter_form: &FileRecordFilterForm,
-) -> Option<FileRecord> {
+    // filter_form: &FileRecordFilterForm,
+) -> Vec<FileRecord> {
     file_records
-        .filter(path.eq(filter_form.path))
+        // .filter(path.eq(filter_form.path))
         .select(FileRecord::as_select())
         .order(id.desc())
-        .first::<FileRecord>(conn)
-        .optional()
+        .load::<FileRecord>(conn)
         .unwrap()
 }

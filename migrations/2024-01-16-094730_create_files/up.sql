@@ -3,6 +3,6 @@ CREATE TABLE file_records (
   jid INTEGER,
   path VARCHAR NOT NULL, -- relative to storage dir
   format CHARACTER(1) NOT NULL,
-  modified_at DATETIME,
-  size BIGINT
+  modified_at DATETIME NOT NULL,
+  size BIGINT NOT NULL
 )

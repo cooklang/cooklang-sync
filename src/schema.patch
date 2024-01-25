@@ -1,5 +1,5 @@
 diff --git a/src/schema.rs b/src/schema.rs
-index 172b50f..da8692d 100644
+index 119fb1d..223d644 100644
 --- a/src/schema.rs
 +++ b/src/schema.rs
 @@ -3,10 +3,10 @@
@@ -9,8 +9,8 @@ index 172b50f..da8692d 100644
          jid -> Nullable<Integer>,
          path -> Text,
          format -> Text,
--        modified_at -> Nullable<Timestamp>,
-+        modified_at -> Nullable<TimestamptzSqlite>,
-         size -> Nullable<BigInt>,
+-        modified_at -> Timestamp,
++        modified_at -> TimestamptzSqlite,
+         size -> BigInt,
      }
  }

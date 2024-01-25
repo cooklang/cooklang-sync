@@ -10,12 +10,12 @@ pub mod syncer;
 use futures::channel::mpsc::channel;
 use futures::join;
 use notify::{RecursiveMode, Watcher};
-use std::path::Path;
+use std::path::PathBuf;
 
 use crate::chunker::{Chunker, InMemoryCache};
 use crate::file_watcher::async_watcher;
 
-use log::{debug};
+use log::debug;
 
 const CHANNEL_SIZE: usize = 100;
 
@@ -28,7 +28,7 @@ pub async fn run(
     let (local_base_updated_tx, _local_base_updated_rx) = channel(CHANNEL_SIZE);
 
     let chunk_cache = InMemoryCache::new();
-    let storage_dir = Path::new(storage_dir);
+    let storage_dir = &PathBuf::from(storage_dir);
     let _chunker = Chunker::new(chunk_cache);
     let pool = local_db::get_connection_pool(db_file_path);
     debug!("Started connection pool for {:?}", db_file_path);

@@ -2,67 +2,48 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use futures::channel::mpsc::{Receiver, Sender};
 use futures::{join, StreamExt};
+use futures::SinkExt;
 use walkdir::WalkDir;
 
 use notify::Event;
-use notify::event::{EventKind};
 use time::OffsetDateTime;
 use tokio::time::Duration;
 
 use diesel::r2d2::{ConnectionManager, Pool};
 use diesel::sqlite::SqliteConnection;
 
-use log::{debug, error, trace};
+use log::{debug, error};
 
 use crate::local_db::*;
-use crate::models::{FileRecord, FileRecordCreateForm, FileRecordFilterForm};
+use crate::models::*;
 
 const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(60);
 
 pub async fn run(
     pool: &Pool<ConnectionManager<SqliteConnection>>,
-    path: &PathBuf,
+    storage_path: &PathBuf,
     mut local_file_update_rx: Receiver<Result<Event, notify::Error>>,
-    _local_db_record_updated_tx: Sender<()>,
+    local_db_record_updated_tx: Sender<IndexerUpdateEvent>,
 ) {
-    let check_file = {
-        |p: &PathBuf| {
-            if filter_eligible(p) {
-                // let _ = compare_and_update(p, pool);
-            }
-        }
-    };
 
-    let check_on_interval = async move {
+
+    let check_on_interval = async {
         loop {
-            let db_files = get_file_records_from_registry(pool);
-            let disk_files = get_file_records_from_disk(path);
+            debug!("interval scan");
+            let channel = local_db_record_updated_tx.clone();
+            do_sync(pool, storage_path, channel).await;
 
-            let (to_update, to_remove, to_add) = compare_records(db_files, disk_files);
-
-            trace!("to_update: {:?}", to_update);
-            trace!("to_remove: {:?}", to_remove);
-            trace!("to_add: {:?}", to_add);
-
-            // local_db_record_updated_tx.send(()).await;
             tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC).await;
         }
     };
 
-    let monitor_watcher_updates = async move {
+    let monitor_watcher_updates = async {
         while let Some(res) = local_file_update_rx.next().await {
             match res {
                 Ok(event) => {
-                    trace!("changed: {:?}", event);
-
-                    match event.kind {
-                        EventKind::Create(_) =>  trace!("event kind Create"),
-                        EventKind::Access(_) =>  trace!("event kind Access"),
-                        EventKind::Modify(_) =>  trace!("event kind Modify"),
-                        EventKind::Remove(_) =>  trace!("event kind Remove"),
-                        EventKind::Any =>  trace!("event kind Any"),
-                        EventKind::Other =>  trace!("event kind Other"),
-                    }
+                    debug!("event triggered {:?}", event);
+                    let channel = local_db_record_updated_tx.clone();
+                    do_sync(pool, storage_path, channel).await;
                 }
                 Err(e) => error!("watch error: {:?}", e),
             }
@@ -70,6 +51,28 @@ pub async fn run(
     };
 
     join!(check_on_interval, monitor_watcher_updates);
+}
+
+async fn do_sync(pool: &Pool<ConnectionManager<SqliteConnection>>, storage_path: &Path, mut local_db_record_updated_tx: Sender<IndexerUpdateEvent>) {
+    let db_files = get_file_records_from_registry(pool);
+    let disk_files = get_file_records_from_disk(storage_path);
+
+    let (to_remove, to_add) = compare_records(db_files, disk_files);
+
+    if !to_remove.is_empty() || !to_add.is_empty() {
+        let conn = &mut pool.get().unwrap();
+
+        if !to_remove.is_empty() {
+            delete_file_records(conn, &to_remove.iter().map(|r| r.id).collect());
+        }
+
+        if !to_add.is_empty() {
+            create_file_records(conn, &to_add);
+        }
+
+        local_db_record_updated_tx.send(IndexerUpdateEvent::Updated).await;
+
+    }
 }
 
 fn filter_eligible(p: &Path) -> bool {
@@ -107,18 +110,16 @@ fn get_file_records_from_registry(pool: &Pool<ConnectionManager<SqliteConnection
     let mut cache = HashMap::new();
 
     let conn = &mut pool.get().unwrap();
-    // TODO
-    // let filter_form = &build_filter_form(path);
+    let filter_form = &build_filter_form();
 
-    for record in latest_file_records(conn) {
+    for record in latest_file_records(conn, filter_form) {
         cache.insert(record.path.clone(), record);
     }
 
     cache
 }
 
-fn compare_records(db_files: HashMap<String, FileRecord>, disk_files: HashMap<String, FileRecordCreateForm>) -> (Vec<FileRecordCreateForm>, Vec<FileRecord>, Vec<FileRecordCreateForm>) {
-    let mut to_update: Vec<FileRecordCreateForm> = Vec::new();
+fn compare_records(db_files: HashMap<String, FileRecord>, disk_files: HashMap<String, FileRecordCreateForm>) -> (Vec<FileRecord>, Vec<FileRecordCreateForm>) {
     let mut to_remove: Vec<FileRecord> = Vec::new();
     let mut to_add: Vec<FileRecordCreateForm> = Vec::new();
 
@@ -126,11 +127,12 @@ fn compare_records(db_files: HashMap<String, FileRecord>, disk_files: HashMap<St
         match disk_files.get(p) {
             Some(disk_file) => {
                 if db_file != disk_file {
-                   to_update.push(disk_file.clone());
+                   to_remove.push(db_file.clone());
+                   to_add.push(disk_file.clone());
                 }
             },
             None => {
-                to_remove.push(db_file.clone())
+                to_remove.push(db_file.clone());
             },
         }
     }
@@ -144,7 +146,13 @@ fn compare_records(db_files: HashMap<String, FileRecord>, disk_files: HashMap<St
         }
     }
 
-    (to_update, to_remove, to_add)
+    (to_remove, to_add)
+}
+
+fn build_filter_form() -> FileRecordNonDeletedFilterForm {
+    FileRecordNonDeletedFilterForm {
+        deleted: false
+    }
 }
 
 

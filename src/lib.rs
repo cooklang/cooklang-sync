@@ -8,14 +8,15 @@ pub mod schema;
 pub mod syncer;
 
 use futures::channel::mpsc::channel;
-use futures::join;
+use futures::{join, StreamExt};
+
 use notify::{RecursiveMode, Watcher};
 use std::path::PathBuf;
 
 use crate::chunker::{Chunker, InMemoryCache};
 use crate::file_watcher::async_watcher;
 
-use log::debug;
+use log::{debug};
 
 const CHANNEL_SIZE: usize = 100;
 
@@ -25,7 +26,7 @@ pub async fn run(
     _remote_token: &str,
 ) -> Result<(), errors::SyncError> {
     let (mut watcher, local_file_update_rx) = async_watcher()?;
-    let (local_base_updated_tx, _local_base_updated_rx) = channel(CHANNEL_SIZE);
+    let (local_registry_updated_tx, mut local_registry_updated_rx) = channel(CHANNEL_SIZE);
 
     let chunk_cache = InMemoryCache::new();
     let storage_dir = &PathBuf::from(storage_dir);
@@ -43,10 +44,17 @@ pub async fn run(
         &pool,
         storage_dir,
         local_file_update_rx,
-        local_base_updated_tx,
+        local_registry_updated_tx,
     );
 
     debug!("Started indexer on {:?}", storage_dir);
+
+
+    let indexer_updates = async {
+        while let Some(event) = local_registry_updated_rx.next().await {
+            debug!("indexer_updates {:?}", event)
+        }
+    };
 
     // let syncer_upload_thread = std::thread::spawn({
     //     syncer.run_upload();
@@ -63,7 +71,7 @@ pub async fn run(
     // can fail if authorization didn't work
     //
 
-    join!(indexer);
+    join!(indexer, indexer_updates);
 
     Ok(())
 }

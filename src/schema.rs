@@ -4,7 +4,7 @@ diesel::table! {
     file_records (id) {
         id -> Integer,
         jid -> Nullable<Integer>,
-        deleted -> Integer,
+        deleted -> Bool,
         path -> Text,
         format -> Text,
         modified_at -> TimestamptzSqlite,

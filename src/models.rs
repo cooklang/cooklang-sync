@@ -2,12 +2,18 @@ use crate::schema::file_records;
 use diesel::prelude::*;
 use time::OffsetDateTime;
 
-#[derive(Queryable, Selectable, Identifiable, AsChangeset, Clone, Debug)]
+#[derive(Debug)]
+pub enum IndexerUpdateEvent {
+    Updated
+}
+
+#[derive(Queryable, Selectable, Identifiable, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecord {
     pub id: i32,
     pub jid: Option<i32>,
+    pub deleted: bool,
     pub path: String,
     pub format: String,
     pub size: i64,
@@ -35,8 +41,17 @@ pub struct FileRecordUpdateForm {
 #[derive(AsChangeset, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-pub struct FileRecordFilterForm<'a> {
-    pub path: &'a str,
+pub struct FileRecordNonDeletedFilterForm {
+    pub deleted: bool
+}
+
+
+#[derive(AsChangeset, Clone, Debug)]
+#[diesel(table_name = file_records)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct FileRecordDeleteForm {
+    pub id: i32,
+    pub deleted: bool
 }
 
 impl PartialEq<FileRecordCreateForm> for FileRecord {

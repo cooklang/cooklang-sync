@@ -1,7 +1,7 @@
 CREATE TABLE file_records (
   id INTEGER PRIMARY KEY NOT NULL,
   jid INTEGER,
-  deleted INTEGER NOT NULL DEFAULT(FALSE),
+  deleted BOOL DEFAULT 0 NOT NULL,
   path VARCHAR NOT NULL, -- relative to storage dir
   format CHARACTER(1) NOT NULL,
   modified_at DATETIME NOT NULL,

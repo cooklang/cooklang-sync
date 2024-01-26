@@ -6,7 +6,7 @@ index 57e9dc0..d223ff5 100644
      file_records (id) {
          id -> Integer,
          jid -> Nullable<Integer>,
-         deleted -> Integer,
+         deleted -> Bool,
          path -> Text,
          format -> Text,
 -        modified_at -> Timestamp,

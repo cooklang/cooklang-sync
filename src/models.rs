@@ -4,7 +4,7 @@ use time::OffsetDateTime;
 
 #[derive(Debug)]
 pub enum IndexerUpdateEvent {
-    Updated
+    Updated,
 }
 
 #[derive(Queryable, Selectable, Identifiable, Clone, Debug)]
@@ -42,16 +42,15 @@ pub struct FileRecordUpdateForm {
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordNonDeletedFilterForm {
-    pub deleted: bool
+    pub deleted: bool,
 }
-
 
 #[derive(AsChangeset, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordDeleteForm {
     pub id: i32,
-    pub deleted: bool
+    pub deleted: bool,
 }
 
 impl PartialEq<FileRecordCreateForm> for FileRecord {

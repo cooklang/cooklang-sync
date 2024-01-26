@@ -1,37 +1,40 @@
-use std::path::{Path, PathBuf};
+use futures::{
+    channel::mpsc::{Receiver, Sender},
+    join, SinkExt, StreamExt,
+};
 use std::collections::HashMap;
-use futures::channel::mpsc::{Receiver, Sender};
-use futures::{join, StreamExt};
-use futures::SinkExt;
+use std::path::Path;
 use walkdir::WalkDir;
 
 use notify::Event;
 use time::OffsetDateTime;
 use tokio::time::Duration;
 
-use diesel::r2d2::{ConnectionManager, Pool};
-use diesel::sqlite::SqliteConnection;
-
-use log::{debug, error};
+use log::{debug, error, trace};
 
 use crate::local_db::*;
 use crate::models::*;
 
+type DBFiles = HashMap<String, FileRecord>;
+type DiskFiles = HashMap<String, FileRecordCreateForm>;
+
 const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(60);
 
 pub async fn run(
-    pool: &Pool<ConnectionManager<SqliteConnection>>,
-    storage_path: &PathBuf,
+    pool: &ConnectionPool,
+    storage_path: &Path,
     mut local_file_update_rx: Receiver<Result<Event, notify::Error>>,
-    local_db_record_updated_tx: Sender<IndexerUpdateEvent>,
+    updated_tx: Sender<IndexerUpdateEvent>,
 ) {
-
-
     let check_on_interval = async {
         loop {
             debug!("interval scan");
-            let channel = local_db_record_updated_tx.clone();
-            do_sync(pool, storage_path, channel).await;
+            let channel = updated_tx.clone();
+            if let Err(e) = do_sync(pool, storage_path, channel).await {
+                // Handle the error, for example, log it
+                error!("Error in do_sync: {}", e);
+                break; // or continue, depending on how you want to handle errors
+            }
 
             tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC).await;
         }
@@ -41,9 +44,14 @@ pub async fn run(
         while let Some(res) = local_file_update_rx.next().await {
             match res {
                 Ok(event) => {
-                    debug!("event triggered {:?}", event);
-                    let channel = local_db_record_updated_tx.clone();
-                    do_sync(pool, storage_path, channel).await;
+                    trace!("fs event triggered {:?}", event);
+
+                    let channel = updated_tx.clone();
+                    if let Err(e) = do_sync(pool, storage_path, channel).await {
+                        // Handle the error, for example, log it
+                        error!("Error in do_sync: {}", e);
+                        break; // or continue, depending on how you want to handle errors
+                    }
                 }
                 Err(e) => error!("watch error: {:?}", e),
             }
@@ -53,7 +61,11 @@ pub async fn run(
     join!(check_on_interval, monitor_watcher_updates);
 }
 
-async fn do_sync(pool: &Pool<ConnectionManager<SqliteConnection>>, storage_path: &Path, mut local_db_record_updated_tx: Sender<IndexerUpdateEvent>) {
+async fn do_sync(
+    pool: &ConnectionPool,
+    storage_path: &Path,
+    mut updated_tx: Sender<IndexerUpdateEvent>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let db_files = get_file_records_from_registry(pool);
     let disk_files = get_file_records_from_disk(storage_path);
 
@@ -63,16 +75,17 @@ async fn do_sync(pool: &Pool<ConnectionManager<SqliteConnection>>, storage_path:
         let conn = &mut pool.get().unwrap();
 
         if !to_remove.is_empty() {
-            delete_file_records(conn, &to_remove.iter().map(|r| r.id).collect());
+            delete_file_records(conn, &to_remove.iter().map(|r| r.id).collect())?;
         }
 
         if !to_add.is_empty() {
-            create_file_records(conn, &to_add);
+            create_file_records(conn, &to_add)?;
         }
 
-        local_db_record_updated_tx.send(IndexerUpdateEvent::Updated).await;
-
+        updated_tx.send(IndexerUpdateEvent::Updated).await?;
     }
+
+    Ok(())
 }
 
 fn filter_eligible(p: &Path) -> bool {
@@ -88,11 +101,11 @@ fn filter_eligible(p: &Path) -> bool {
     }
 }
 
-
 fn get_file_records_from_disk(p: &Path) -> HashMap<String, FileRecordCreateForm> {
     let mut cache = HashMap::new();
 
-    let iter = WalkDir::new(p).into_iter()
+    let iter = WalkDir::new(p)
+        .into_iter()
         .filter_map(|e| e.ok())
         .map(|p| p.into_path())
         .filter(|p| filter_eligible(p));
@@ -106,7 +119,7 @@ fn get_file_records_from_disk(p: &Path) -> HashMap<String, FileRecordCreateForm>
     cache
 }
 
-fn get_file_records_from_registry(pool: &Pool<ConnectionManager<SqliteConnection>>) -> HashMap<String, FileRecord> {
+fn get_file_records_from_registry(pool: &ConnectionPool) -> HashMap<String, FileRecord> {
     let mut cache = HashMap::new();
 
     let conn = &mut pool.get().unwrap();
@@ -119,7 +132,10 @@ fn get_file_records_from_registry(pool: &Pool<ConnectionManager<SqliteConnection
     cache
 }
 
-fn compare_records(db_files: HashMap<String, FileRecord>, disk_files: HashMap<String, FileRecordCreateForm>) -> (Vec<FileRecord>, Vec<FileRecordCreateForm>) {
+fn compare_records(
+    db_files: DBFiles,
+    disk_files: DiskFiles,
+) -> (Vec<FileRecord>, Vec<FileRecordCreateForm>) {
     let mut to_remove: Vec<FileRecord> = Vec::new();
     let mut to_add: Vec<FileRecordCreateForm> = Vec::new();
 
@@ -127,22 +143,19 @@ fn compare_records(db_files: HashMap<String, FileRecord>, disk_files: HashMap<St
         match disk_files.get(p) {
             Some(disk_file) => {
                 if db_file != disk_file {
-                   to_remove.push(db_file.clone());
-                   to_add.push(disk_file.clone());
+                    to_remove.push(db_file.clone());
+                    to_add.push(disk_file.clone());
                 }
-            },
+            }
             None => {
                 to_remove.push(db_file.clone());
-            },
+            }
         }
     }
 
     for (p, disk_file) in &disk_files {
-        match db_files.get(p) {
-            None => {
-                to_add.push(disk_file.clone());
-            },
-            _ => {},
+        if db_files.get(p).is_none() {
+            to_add.push(disk_file.clone());
         }
     }
 
@@ -150,11 +163,8 @@ fn compare_records(db_files: HashMap<String, FileRecord>, disk_files: HashMap<St
 }
 
 fn build_filter_form() -> FileRecordNonDeletedFilterForm {
-    FileRecordNonDeletedFilterForm {
-        deleted: false
-    }
+    FileRecordNonDeletedFilterForm { deleted: false }
 }
-
 
 fn build_file_record(path: &Path) -> FileRecordCreateForm {
     let metadata = path.metadata().unwrap();

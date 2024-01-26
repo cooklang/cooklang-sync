@@ -7,16 +7,14 @@ pub mod models;
 pub mod schema;
 pub mod syncer;
 
-use futures::channel::mpsc::channel;
-use futures::{join, StreamExt};
-
+use futures::{channel::mpsc::channel, join, StreamExt};
 use notify::{RecursiveMode, Watcher};
 use std::path::PathBuf;
 
+use log::debug;
+
 use crate::chunker::{Chunker, InMemoryCache};
 use crate::file_watcher::async_watcher;
-
-use log::{debug};
 
 const CHANNEL_SIZE: usize = 100;
 
@@ -46,9 +44,7 @@ pub async fn run(
         local_file_update_rx,
         local_registry_updated_tx,
     );
-
     debug!("Started indexer on {:?}", storage_dir);
-
 
     let indexer_updates = async {
         while let Some(event) = local_registry_updated_rx.next().await {

@@ -1,18 +1,17 @@
-mod chunk_id;
-
 use std::io;
 
 use rocket::data::{Data, ToByteUnit};
 use rocket::fairing::AdHoc;
 use rocket::http::uri::Absolute;
 use rocket::response::content::RawText;
-use rocket::tokio::fs::{self, File};
+use rocket::tokio::fs::File;
 
-use chunk_id::ChunkId;
+use crate::chunk_id::ChunkId;
 
 // In a real application, these would be retrieved dynamically from a config.
 const HOST: Absolute<'static> = uri!("http://localhost:8000");
 
+/// Uploads chunk to a storage
 #[post("/<id>", data = "<chunk>")]
 async fn upload(id: ChunkId<'_>, chunk: Data<'_>) -> io::Result<String> {
     chunk
@@ -22,36 +21,15 @@ async fn upload(id: ChunkId<'_>, chunk: Data<'_>) -> io::Result<String> {
     Ok(uri!(HOST, retrieve(id)).to_string())
 }
 
+
+/// Downloads chunk from a storage
 #[get("/<id>")]
 async fn retrieve(id: ChunkId<'_>) -> Option<RawText<File>> {
     File::open(id.file_path()).await.map(RawText).ok()
 }
 
-#[delete("/<id>")]
-async fn delete(id: ChunkId<'_>) -> Option<()> {
-    fs::remove_file(id.file_path()).await.ok()
-}
-
-#[get("/")]
-fn index() -> &'static str {
-    "
-    USAGE
-
-      POST /<id>
-
-          accepts raw data in the body of the request and responds with a URL of
-          a page containing the body's content
-
-          EXAMPLE: curl --data-binary @file.txt http://localhost:8000/<id>
-
-      GET /<id>
-
-          retrieves the content for the paste with id `<id>`
-    "
-}
-
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Chunk Server Stage", |rocket| async {
-        rocket.mount("/chunks", routes![index, upload, delete, retrieve])
+        rocket.mount("/chunks", routes![upload, retrieve])
     })
 }

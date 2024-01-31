@@ -5,6 +5,7 @@ diesel::table! {
         id -> Integer,
         deleted -> Bool,
         path -> Text,
+        chunk_ids -> Text,
         format -> Text,
     }
 }

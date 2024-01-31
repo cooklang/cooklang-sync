@@ -3,15 +3,20 @@ use std::path::{Path, PathBuf};
 
 use rocket::request::FromParam;
 
-/// A _probably_ unique paste ID.
+/// A _probably_ unique chunk ID.
 #[derive(UriDisplayPath)]
-pub struct ChunkId<'a>(Cow<'a, str>);
+pub struct ChunkId<'a>(pub(crate) Cow<'a, str>);
 
 impl ChunkId<'_> {
-    /// Returns the path to the paste in `upload/` corresponding to this ID.
+    /// Returns the path to the chunk in `upload/` corresponding to this ID.
     pub fn file_path(&self) -> PathBuf {
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/", "upload");
         Path::new(root).join(self.0.as_ref())
+    }
+
+    /// Returns the path to the chunk in `upload/` corresponding to this ID.
+    pub fn is_present(&self) -> bool {
+        self.file_path().exists()
     }
 }
 

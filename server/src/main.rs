@@ -1,9 +1,8 @@
 #[macro_use]
 extern crate rocket;
-
-#[macro_use]
 extern crate diesel;
 
+mod chunk_id;
 mod chunks;
 mod metadata;
 mod models;

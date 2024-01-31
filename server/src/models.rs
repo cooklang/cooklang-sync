@@ -1,7 +1,6 @@
 use crate::schema::file_records;
 use diesel::prelude::*;
-use rocket::serde::{Serialize, Deserialize, json::Json};
-
+use rocket::serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Selectable, Identifiable, Deserialize, Serialize, Clone, Debug)]
 #[diesel(table_name = file_records)]
@@ -9,7 +8,17 @@ use rocket::serde::{Serialize, Deserialize, json::Json};
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecord {
     pub id: i32,
-    pub deleted: bool,
     pub path: String,
+    pub chunk_ids: String,
+    pub format: String,
+}
+
+#[derive(Insertable, Deserialize, Serialize, Clone, Debug)]
+#[diesel(table_name = file_records)]
+#[serde(crate = "rocket::serde")]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct NewFileRecord {
+    pub path: String,
+    pub chunk_ids: String,
     pub format: String,
 }

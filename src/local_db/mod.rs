@@ -42,13 +42,23 @@ pub fn delete_file_records(
         .execute(conn)
 }
 
-pub fn latest_file_records(
-    conn: &mut SqliteConnection,
-    filter_form: &FileRecordNonDeletedFilterForm,
-) -> Vec<FileRecord> {
-    trace!("latest_file_records");
+pub fn non_deleted_file_records(conn: &mut SqliteConnection) -> Vec<FileRecord> {
+    trace!("non_deleted_file_records");
     file_records
-        .filter(deleted.eq(filter_form.deleted))
+        .filter(deleted.eq(false))
+        .select(FileRecord::as_select())
+        .order(id.desc())
+        .load::<FileRecord>(conn)
+        .unwrap()
+}
+
+/// Files that don't have jid and not deleted
+/// These should be send to remote
+pub fn updated_locally_file_records(conn: &mut SqliteConnection) -> Vec<FileRecord> {
+    trace!("non_deleted_file_records");
+    file_records
+        .filter(deleted.eq(false))
+        .filter(jid.is_null())
         .select(FileRecord::as_select())
         .order(id.desc())
         .load::<FileRecord>(conn)

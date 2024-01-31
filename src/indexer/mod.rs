@@ -18,7 +18,7 @@ use crate::models::*;
 type DBFiles = HashMap<String, FileRecord>;
 type DiskFiles = HashMap<String, FileRecordCreateForm>;
 
-const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(60);
+const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(61);
 
 pub async fn run(
     pool: &ConnectionPool,
@@ -123,9 +123,8 @@ fn get_file_records_from_registry(pool: &ConnectionPool) -> HashMap<String, File
     let mut cache = HashMap::new();
 
     let conn = &mut pool.get().unwrap();
-    let filter_form = &build_filter_form();
 
-    for record in latest_file_records(conn, filter_form) {
+    for record in non_deleted_file_records(conn) {
         cache.insert(record.path.clone(), record);
     }
 
@@ -162,9 +161,6 @@ fn compare_records(
     (to_remove, to_add)
 }
 
-fn build_filter_form() -> FileRecordNonDeletedFilterForm {
-    FileRecordNonDeletedFilterForm { deleted: false }
-}
 
 fn build_file_record(path: &Path) -> FileRecordCreateForm {
     let metadata = path.metadata().unwrap();

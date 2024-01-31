@@ -286,6 +286,7 @@ name = "cooklang-sync-client"
 version = "0.1.0"
 dependencies = [
  "blake3",
+ "bytes",
  "camino",
  "diesel",
  "diesel_migrations",

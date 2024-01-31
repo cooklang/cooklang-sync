@@ -8,7 +8,6 @@ use rocket::request::FromParam;
 pub struct ChunkId<'a>(Cow<'a, str>);
 
 impl ChunkId<'_> {
-
     /// Returns the path to the paste in `upload/` corresponding to this ID.
     pub fn file_path(&self) -> PathBuf {
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/", "upload");
@@ -22,7 +21,9 @@ impl<'a> FromParam<'a> for ChunkId<'a> {
     type Error = &'a str;
 
     fn from_param(param: &'a str) -> Result<Self, Self::Error> {
-        param.chars().all(|c| c.is_ascii_alphanumeric())
+        param
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric())
             .then(|| ChunkId(param.into()))
             .ok_or(param)
     }

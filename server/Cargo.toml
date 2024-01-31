@@ -11,4 +11,8 @@ name = "server"
 
 
 [dependencies]
-rocket = "0.5.0"
+rocket = { version = "0.5.0", features = ["json"] }
+rocket_sync_db_pools = { version = "0.1.0-rc.2", features = [ "diesel_sqlite_pool" ] }
+diesel = { version = "2", features = ["returning_clauses_for_sqlite_3_35", "sqlite", "r2d2"] }
+diesel_migrations = "2"
+rusqlite = { version = "0.30.0", features = ["bundled"] }

@@ -6,7 +6,7 @@ async fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
 
     let args: Vec<String> = std::env::args().collect();
 
-    if args.len() > 2 {
+    if args.len() > 3 {
         let monitor_path = &args[1];
         let db_path = &args[2];
         let api_endpoint = &args[3];

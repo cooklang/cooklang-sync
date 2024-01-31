@@ -1,15 +1,12 @@
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
 
 mod chunks;
-
-use std::io;
-
-use rocket::data::{Data, ToByteUnit};
-use rocket::http::uri::Absolute;
-use rocket::response::content::RawText;
-use rocket::tokio::fs::{self, File};
+mod metadata;
 
 #[launch]
 fn rocket() -> _ {
-    rocket::build().attach(chunks::stage())
+    rocket::build()
+        .attach(chunks::stage())
+        .attach(metadata::stage())
 }

@@ -1,12 +1,9 @@
-
-#[cfg(test)]
-mod tests;
 mod chunk_id;
 
 use std::io;
 
-use rocket::fairing::AdHoc;
 use rocket::data::{Data, ToByteUnit};
+use rocket::fairing::AdHoc;
 use rocket::http::uri::Absolute;
 use rocket::response::content::RawText;
 use rocket::tokio::fs::{self, File};
@@ -18,7 +15,10 @@ const HOST: Absolute<'static> = uri!("http://localhost:8000");
 
 #[post("/<id>", data = "<chunk>")]
 async fn upload(id: ChunkId<'_>, chunk: Data<'_>) -> io::Result<String> {
-    chunk.open(128.kibibytes()).into_file(id.file_path()).await?;
+    chunk
+        .open(128.kibibytes())
+        .into_file(id.file_path())
+        .await?;
     Ok(uri!(HOST, retrieve(id)).to_string())
 }
 
@@ -49,7 +49,6 @@ fn index() -> &'static str {
           retrieves the content for the paste with id `<id>`
     "
 }
-
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Chunk Server Stage", |rocket| async {

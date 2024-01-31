@@ -21,6 +21,7 @@ const CHANNEL_SIZE: usize = 100;
 pub async fn run(
     storage_dir: &str,
     db_file_path: &str,
+    api_endpoint: &str,
     remote_token: &str,
 ) -> Result<(), errors::SyncError> {
     let (mut watcher, local_file_update_rx) = async_watcher()?;

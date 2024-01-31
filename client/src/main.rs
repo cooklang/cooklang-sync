@@ -9,8 +9,9 @@ async fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
     if args.len() > 2 {
         let monitor_path = &args[1];
         let db_path = &args[2];
-        let client_token = &args[3];
-        run(monitor_path, db_path, client_token).await?;
+        let api_endpoint = &args[3];
+        let client_token = &args[4];
+        run(monitor_path, db_path, api_endpoint, client_token).await?;
     } else {
         panic!("No arguments were provided.");
     }

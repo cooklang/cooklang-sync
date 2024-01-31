@@ -11,3 +11,4 @@ name = "server"
 
 
 [dependencies]
+rocket = "0.5.0"

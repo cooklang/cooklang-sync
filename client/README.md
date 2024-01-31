@@ -5,7 +5,6 @@ Server File Journal - stores all changes
 ===================
 Namespace Id (NSID)
 Relative Path in namespace
-Array of Chunks
 Journal ID (JID): Monotonically increasing within a namespace
 
 

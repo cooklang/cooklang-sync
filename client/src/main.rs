@@ -1,7 +1,7 @@
-use cooklang_sync::run;
+use cooklang_sync_client::run;
 
 #[tokio::main]
-async fn main() -> Result<(), cooklang_sync::errors::SyncError> {
+async fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
     env_logger::init();
 
     let args: Vec<String> = std::env::args().collect();

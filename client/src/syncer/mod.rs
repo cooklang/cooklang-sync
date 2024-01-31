@@ -61,7 +61,7 @@ async fn do_sync(
 
     let to_upload = updated_locally_file_records(conn);
 
-    trace!("{:?}", to_update);
+    trace!("{:?}", to_upload);
 
     Ok(())
 }

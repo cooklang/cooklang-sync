@@ -1,0 +1,25 @@
+[package]
+name = "cooklang-sync-client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+path = "src/main.rs"
+name = "client"
+
+[dependencies]
+blake3 = "1.5.0"
+camino = "1.1.6"
+diesel = { version = "2.1.4", features = ["sqlite", "time", "r2d2"] }
+digest = "0.10.7"
+env_logger = "0.11.0"
+futures = "0.3.30"
+log = "0.4.20"
+notify = "6.1.1"
+notify-debouncer-full = "0.3.1"
+rusqlite = { version = "0.30.0", features = ["bundled"] }
+time = { version = "0.3.31", features = ["std"] }
+tokio = { version = "1.35.1", features = ["time", "full"] }
+walkdir = "2.4.0"

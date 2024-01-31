@@ -42,8 +42,6 @@ async fn commit(
 ) -> Result<Json<CommitResultStatus>> {
     let desired: Vec<&str> = commit_payload.chunk_ids.split(',').collect();
 
-    println!("{:?}", commit_payload);
-
     let to_be_uploaded: Vec<ChunkId> = desired
         .into_iter()
         .map(|c| ChunkId(std::borrow::Cow::Borrowed(c)))

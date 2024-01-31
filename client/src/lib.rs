@@ -30,7 +30,7 @@ pub async fn run(
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new();
     let chunker = Chunker::new(chunk_cache);
-    let remote = syncer::remote::Remote::new(remote_token);
+    let remote = syncer::remote::Remote::new(api_endpoint, remote_token);
 
     let pool = local_db::get_connection_pool(db_file_path);
     debug!("Started connection pool for {:?}", db_file_path);

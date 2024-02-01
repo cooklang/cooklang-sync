@@ -1,5 +1,6 @@
 /target
 /tmp/*
+/tmp2
 !/tmp/.keep
 .DS_Store
 **/*.sqlite3

@@ -11,7 +11,7 @@ use tokio::time::Duration;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use log::{debug, trace};
+use log::{debug, trace, error};
 
 use crate::local_db::*;
 use crate::models::*;
@@ -22,6 +22,7 @@ const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 
 pub async fn run(
     pool: &ConnectionPool,
+    storage_path: &PathBuf,
     chunker: &mut Chunker<InMemoryCache>,
     remote: &remote::Remote,
     mut local_registry_updated_rx: Receiver<IndexerUpdateEvent>,
@@ -41,6 +42,8 @@ pub async fn run(
 
             // TODO dowload chunks and create records in registry
             for d in &to_download {
+                trace!("interval_check_download {:?}", d);
+
                 let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
                 let mut chunker = chunker.lock().await;
 
@@ -49,13 +52,13 @@ pub async fn run(
                         chunker.save_chunk(c, remote.download(c).await.unwrap());
                     }
                 }
-                chunker.save(&d.path, chunks);
+                if let Err(e) = chunker.save(&d.path, chunks) {
+                    error!("{:?}", e);
+                }
 
-                let form = build_file_record(&d.path, d.id);
+                let form = build_file_record(&d.path, storage_path, d.id);
                 create_file_records(conn, &vec![form]);
             }
-
-            trace!("interval_check_download {:?} {:?}", latest_local, to_download);
 
             tokio::time::sleep(INTERVAL_CHECK_DOWNLOAD_SEC).await;
         }
@@ -74,6 +77,7 @@ pub async fn run(
             for f in &to_upload {
                 let mut chunker = chunker.lock().await;
                 let chunk_ids = chunker.hashify(&f.path).unwrap();
+                trace!("interval_check_upload {:?} {:?}", f, chunk_ids);
                 let r = remote.commit(&f.path, &chunk_ids.join(","), "t").await.unwrap();
 
                 match r {
@@ -116,8 +120,11 @@ pub async fn run(
     join!(interval_check_download, interval_check_upload, monitor_indexer_updates);
 }
 
-fn build_file_record(path: &str, jid: i32) -> FileRecordCreateForm {
-    let metadata = PathBuf::from(path).metadata().unwrap();
+fn build_file_record(path: &str, base: &PathBuf, jid: i32) -> FileRecordCreateForm {
+    let mut full_path = base.clone();
+    full_path.push(path);
+    trace!("full_path {:?}", full_path);
+    let metadata =full_path.metadata().unwrap();
     let size: i64 = metadata.len().try_into().unwrap();
     let modified_at = OffsetDateTime::from(metadata.modified().unwrap());
 

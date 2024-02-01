@@ -29,7 +29,7 @@ pub async fn run(
 
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new();
-    let chunker = &mut Chunker::new(chunk_cache);
+    let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());
     let remote = &syncer::remote::Remote::new(api_endpoint, remote_token);
 
     let pool = local_db::get_connection_pool(db_file_path);
@@ -48,6 +48,7 @@ pub async fn run(
 
     let syncer = syncer::run(
         &pool,
+        storage_dir,
         chunker,
         remote,
         local_registry_updated_rx,

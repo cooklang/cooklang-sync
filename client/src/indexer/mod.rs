@@ -95,25 +95,26 @@ fn filter_eligible(p: &Path) -> bool {
     }
 
     if let Some(ext) = p.extension() {
+        // TODO allow generic
         ext == "cook"
     } else {
         false
     }
 }
 
-fn get_file_records_from_disk(p: &Path) -> HashMap<String, FileRecordCreateForm> {
+fn get_file_records_from_disk(base_path: &Path) -> HashMap<String, FileRecordCreateForm> {
     let mut cache = HashMap::new();
 
-    let iter = WalkDir::new(p)
+    let iter = WalkDir::new(base_path)
         .into_iter()
         .filter_map(|e| e.ok())
         .map(|p| p.into_path())
         .filter(|p| filter_eligible(p));
 
     for p in iter {
-        let record = build_file_record(&p);
+        let record = build_file_record(&p, base_path);
 
-        cache.insert(p.to_string_lossy().into_owned(), record);
+        cache.insert(record.path.clone(), record);
     }
 
     cache
@@ -162,9 +163,9 @@ fn compare_records(
 }
 
 
-fn build_file_record(path: &Path) -> FileRecordCreateForm {
+fn build_file_record(path: &Path, base: &Path) -> FileRecordCreateForm {
     let metadata = path.metadata().unwrap();
-    let path = path.to_string_lossy().into_owned();
+    let path = path.strip_prefix(base).unwrap().to_string_lossy().into_owned();
     let size: i64 = metadata.len().try_into().unwrap();
     let modified_at = OffsetDateTime::from(metadata.modified().unwrap());
 

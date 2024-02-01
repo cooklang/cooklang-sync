@@ -1,43 +1,12 @@
+use std::collections::HashMap;
 use std::fs::{File, create_dir_all};
 use std::io::{self, prelude::*, BufReader, BufWriter};
+use std::path::{PathBuf};
+
 use bytes::Bytes;
 use sha2::{Sha256, Digest};
-use std::path::{PathBuf};
-use std::collections::HashMap;
 
 use log::{trace};
-
-pub struct InMemoryCache {
-    cache: HashMap<String, Bytes>,
-}
-
-impl InMemoryCache {
-    pub fn new() -> InMemoryCache {
-        InMemoryCache {
-            cache: HashMap::new(),
-        }
-    }
-
-    fn get(&self, chunk_hash: &str) -> io::Result<Bytes> {
-        match self.cache.get(chunk_hash) {
-            Some(content) => Ok(content.clone()),
-            None => Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Chunk not found in cache",
-            )),
-        }
-    }
-
-    fn set(&mut self, chunk_hash: &str, content: Bytes) -> io::Result<()> {
-        self.cache.insert(chunk_hash.to_string(), content);
-        Ok(())
-    }
-
-    fn contains(&self, chunk_hash: &str) -> bool {
-        self.cache.contains_key(chunk_hash)
-    }
-}
-
 
 pub struct Chunker {
     cache: InMemoryCache,
@@ -46,7 +15,7 @@ pub struct Chunker {
 
 impl Chunker {
     pub fn new(cache: InMemoryCache, base_path: PathBuf) -> Chunker {
-        Chunker { cache, base_path: base_path }
+        Chunker { cache, base_path }
     }
 
     fn full_path(&self, path: &str) -> PathBuf {
@@ -123,3 +92,34 @@ impl Chunker {
     }
 }
 
+
+pub struct InMemoryCache {
+    cache: HashMap<String, Bytes>,
+}
+
+impl InMemoryCache {
+    pub fn new() -> InMemoryCache {
+        InMemoryCache {
+            cache: HashMap::new(),
+        }
+    }
+
+    fn get(&self, chunk_hash: &str) -> io::Result<Bytes> {
+        match self.cache.get(chunk_hash) {
+            Some(content) => Ok(content.clone()),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Chunk not found in cache",
+            )),
+        }
+    }
+
+    fn set(&mut self, chunk_hash: &str, content: Bytes) -> io::Result<()> {
+        self.cache.insert(chunk_hash.to_string(), content);
+        Ok(())
+    }
+
+    fn contains(&self, chunk_hash: &str) -> bool {
+        self.cache.contains_key(chunk_hash)
+    }
+}

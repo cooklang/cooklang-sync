@@ -133,3 +133,5 @@ TODO
     - by extension select text files, the rest is binary
 - test test test
 - namespacing mounting
+- filter stream events to propagate only required files
+-

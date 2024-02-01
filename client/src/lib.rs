@@ -7,6 +7,7 @@ pub mod models;
 pub mod schema;
 pub mod syncer;
 pub mod remote;
+pub mod connection;
 
 use futures::{channel::mpsc::channel, join};
 use notify::{RecursiveMode, Watcher};
@@ -33,7 +34,7 @@ pub async fn run(
     let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());
     let remote = &remote::Remote::new(api_endpoint, remote_token);
 
-    let pool = registry::get_connection_pool(db_file_path);
+    let pool = connection::get_connection_pool(db_file_path)?;
     debug!("Started connection pool for {:?}", db_file_path);
 
     watcher.watch(storage_dir, RecursiveMode::Recursive)?;

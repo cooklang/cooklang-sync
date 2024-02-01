@@ -10,13 +10,15 @@ use notify::Event;
 use time::OffsetDateTime;
 use tokio::time::Duration;
 
-use log::{debug, error, trace};
+use log::{debug};
 
-use crate::registry::*;
+use crate::registry;
+use crate::errors::SyncError;
+use crate::connection::{ConnectionPool, get_connection};
 use crate::models::*;
 
 type DBFiles = HashMap<String, FileRecord>;
-type DiskFiles = HashMap<String, FileRecordCreateForm>;
+type DiskFiles = HashMap<String, CreateForm>;
 
 const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(61);
 
@@ -24,69 +26,38 @@ pub async fn run(
     pool: &ConnectionPool,
     storage_path: &Path,
     mut local_file_update_rx: Receiver<Result<Event, notify::Error>>,
-    updated_tx: Sender<IndexerUpdateEvent>,
-) {
-    let check_on_interval = async {
-        loop {
-            debug!("interval scan");
-            let channel = updated_tx.clone();
-            if let Err(e) = do_sync(pool, storage_path, channel).await {
-                // Handle the error, for example, log it
-                error!("Error in do_sync: {}", e);
-                break; // or continue, depending on how you want to handle errors
-            }
-
-            tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC).await;
-        }
-    };
-
-    let monitor_watcher_updates = async {
-        while let Some(res) = local_file_update_rx.next().await {
-            match res {
-                Ok(event) => {
-                    trace!("fs event triggered {:?}", event);
-
-                    let channel = updated_tx.clone();
-                    if let Err(e) = do_sync(pool, storage_path, channel).await {
-                        // Handle the error, for example, log it
-                        error!("Error in do_sync: {}", e);
-                        break; // or continue, depending on how you want to handle errors
-                    }
-                }
-                Err(e) => error!("watch error: {:?}", e),
-            }
-        }
-    };
-
-    join!(check_on_interval, monitor_watcher_updates);
-}
-
-async fn do_sync(
-    pool: &ConnectionPool,
-    storage_path: &Path,
     mut updated_tx: Sender<IndexerUpdateEvent>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let db_files = get_file_records_from_registry(pool);
-    let disk_files = get_file_records_from_disk(storage_path);
+) -> Result<(), SyncError> {
 
-    let (to_remove, to_add) = compare_records(db_files, disk_files);
+    loop {
+        debug!("interval scan");
 
-    if !to_remove.is_empty() || !to_add.is_empty() {
-        let conn = &mut pool.get().unwrap();
+        // TODO should be smarter and don't stop the loop,
+        // unless repeating errors
+        let from_db = get_file_records_from_registry(pool)?;
+        let from_fs = get_file_records_from_disk(storage_path)?;
 
-        if !to_remove.is_empty() {
-            delete_file_records(conn, &to_remove.iter().map(|r| r.id).collect())?;
+        let (to_remove, to_add) = compare_records(from_db, from_fs);
+
+        if !to_remove.is_empty() || !to_add.is_empty() {
+            let conn = &mut get_connection(pool)?;
+
+            if !to_remove.is_empty() {
+                registry::delete(conn, &to_remove.iter().map(|r| r.id).collect())?;
+            }
+
+            if !to_add.is_empty() {
+                registry::create(conn, &to_add)?;
+            }
+
+            updated_tx.send(IndexerUpdateEvent::Updated).await;
         }
 
-        if !to_add.is_empty() {
-            create_file_records(conn, &to_add)?;
-        }
-
-        updated_tx.send(IndexerUpdateEvent::Updated).await?;
+        join!(tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC), local_file_update_rx.next());
     }
 
-    Ok(())
 }
+
 
 fn filter_eligible(p: &Path) -> bool {
     // TODO properly follow symlinks, they can be broken as well
@@ -102,7 +73,7 @@ fn filter_eligible(p: &Path) -> bool {
     }
 }
 
-fn get_file_records_from_disk(base_path: &Path) -> HashMap<String, FileRecordCreateForm> {
+fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles,SyncError> {
     let mut cache = HashMap::new();
 
     let iter = WalkDir::new(base_path)
@@ -112,35 +83,35 @@ fn get_file_records_from_disk(base_path: &Path) -> HashMap<String, FileRecordCre
         .filter(|p| filter_eligible(p));
 
     for p in iter {
-        let record = build_file_record(&p, base_path);
+        let record = build_file_record(&p, base_path)?;
 
         cache.insert(record.path.clone(), record);
     }
 
-    cache
+    Ok(cache)
 }
 
-fn get_file_records_from_registry(pool: &ConnectionPool) -> HashMap<String, FileRecord> {
+fn get_file_records_from_registry(pool: &ConnectionPool) -> Result<DBFiles,SyncError> {
     let mut cache = HashMap::new();
 
-    let conn = &mut pool.get().unwrap();
+    let conn = &mut get_connection(pool)?;
 
-    for record in non_deleted_file_records(conn) {
+    for record in registry::non_deleted(conn)? {
         cache.insert(record.path.clone(), record);
     }
 
-    cache
+    Ok(cache)
 }
 
 fn compare_records(
-    db_files: DBFiles,
-    disk_files: DiskFiles,
-) -> (Vec<FileRecord>, Vec<FileRecordCreateForm>) {
+    from_db: DBFiles,
+    from_fs: DiskFiles,
+) -> (Vec<FileRecord>, Vec<CreateForm>) {
     let mut to_remove: Vec<FileRecord> = Vec::new();
-    let mut to_add: Vec<FileRecordCreateForm> = Vec::new();
+    let mut to_add: Vec<CreateForm> = Vec::new();
 
-    for (p, db_file) in &db_files {
-        match disk_files.get(p) {
+    for (p, db_file) in &from_db {
+        match from_fs.get(p) {
             Some(disk_file) => {
                 if db_file != disk_file {
                     to_remove.push(db_file.clone());
@@ -153,8 +124,8 @@ fn compare_records(
         }
     }
 
-    for (p, disk_file) in &disk_files {
-        if db_files.get(p).is_none() {
+    for (p, disk_file) in &from_fs {
+        if from_db.get(p).is_none() {
             to_add.push(disk_file.clone());
         }
     }
@@ -163,17 +134,21 @@ fn compare_records(
 }
 
 
-fn build_file_record(path: &Path, base: &Path) -> FileRecordCreateForm {
-    let metadata = path.metadata().unwrap();
-    let path = path.strip_prefix(base).unwrap().to_string_lossy().into_owned();
-    let size: i64 = metadata.len().try_into().unwrap();
-    let modified_at = OffsetDateTime::from(metadata.modified().unwrap());
+fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm,SyncError> {
+    let metadata = path.metadata()?;
+    let path = path.strip_prefix(base)?.to_string_lossy().into_owned();
+    let size: i64 = metadata.len().try_into()?;
+    let time = metadata.modified()?;
+    let modified_at = OffsetDateTime::from(time);
 
-    FileRecordCreateForm {
+    let f = CreateForm {
         jid: None,
         path,
         size,
         format: "t".to_string(),
         modified_at,
-    }
+    };
+
+    Ok(f)
+
 }

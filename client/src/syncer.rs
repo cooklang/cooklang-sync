@@ -2,7 +2,7 @@ use futures::{
     channel::mpsc::{Receiver},
     join, StreamExt,
 };
-use std::path::PathBuf;
+use std::path::Path;
 
 use time::OffsetDateTime;
 use tokio::time::Duration;
@@ -11,20 +11,22 @@ use tokio::sync::Mutex;
 
 use log::{debug, trace, error};
 
-use crate::registry::*;
-use crate::models::*;
-use crate::chunker::*;
-use crate::remote::*;
+use crate::registry;
+use crate::connection::{ConnectionPool, get_connection};
+use crate::models;
+use crate::errors::SyncError;
+use crate::chunker::Chunker;
+use crate::remote::{Remote, CommitResultStatus};
 
 const INTERVAL_CHECK_DOWNLOAD_SEC: Duration = Duration::from_secs(23);
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 
 pub async fn run(
     pool: &ConnectionPool,
-    storage_path: &PathBuf,
+    storage_path: &Path,
     chunker: &mut Chunker,
     remote: &Remote,
-    mut local_registry_updated_rx: Receiver<IndexerUpdateEvent>,
+    mut local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
 ) {
     let chunker = Arc::new(Mutex::new(chunker));
 
@@ -34,10 +36,10 @@ pub async fn run(
         loop {
             debug!("interval scan");
 
-            let conn = &mut pool.get().unwrap();
+            let conn = &mut get_connection(pool).unwrap();
 
-            let latest_local = latest_jid(conn);
-            let to_download = remote.list(latest_local.unwrap_or(0)).await.unwrap();
+            let latest_local = registry::latest_jid(conn).unwrap_or(0);
+            let to_download = remote.list(latest_local).await.unwrap();
 
             // TODO dowload chunks and create records in registry
             for d in &to_download {
@@ -51,12 +53,13 @@ pub async fn run(
                         chunker.save_chunk(c, remote.download(c).await.unwrap());
                     }
                 }
+
                 if let Err(e) = chunker.save(&d.path, chunks) {
                     error!("{:?}", e);
                 }
 
-                let form = build_file_record(&d.path, storage_path, d.id);
-                create_file_records(conn, &vec![form]);
+                let form = build_file_record(&d.path, storage_path, d.id).unwrap();
+                registry::create(conn, &vec![form]);
             }
 
             tokio::time::sleep(INTERVAL_CHECK_DOWNLOAD_SEC).await;
@@ -69,9 +72,9 @@ pub async fn run(
         loop {
             debug!("interval scan");
 
-            let conn = &mut pool.get().unwrap();
+            let conn = &mut get_connection(pool).unwrap();
 
-            let to_upload = updated_locally_file_records(conn);
+            let to_upload = registry::updated_locally(conn).unwrap();
 
             for f in &to_upload {
                 let mut chunker = chunker.lock().await;
@@ -82,7 +85,7 @@ pub async fn run(
                 match r {
                     CommitResultStatus::Success(jid) => {
                         trace!("commited {:?}", jid);
-                        update_jid_on_file_record(conn, f, jid);
+                        registry::update_jid(conn, f, jid);
                     },
                     CommitResultStatus::NeedChunks(chunks) => {
                         trace!("need chunks {:?}", chunks);
@@ -97,41 +100,33 @@ pub async fn run(
             // need to wait only if we didn't upload anything
             // otherwise it should re-run immideately
             if to_upload.is_empty() {
-                tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC).await;
+                // TODO not quite
+                join!(tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC), local_registry_updated_rx.next());
             }
-        }
-    };
-
-    let monitor_indexer_updates = async {
-        while let Some(event) = local_registry_updated_rx.next().await {
-            trace!("fs event triggered {:?}", event);
-
-            // if let Err(e) = do_sync(pool).await {
-            //     // Handle the error, for example, log it
-            //     error!("Error in do_sync: {}", e);
-            //     break; // or continue, depending on how you want to handle errors
-            // }
         }
     };
 
     // remote_polling to change from remote to local
 
-    join!(interval_check_download, interval_check_upload, monitor_indexer_updates);
+    join!(interval_check_download, interval_check_upload);
 }
 
-fn build_file_record(path: &str, base: &PathBuf, jid: i32) -> FileRecordCreateForm {
-    let mut full_path = base.clone();
+fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm,SyncError> {
+    let mut full_path = base.to_path_buf();
     full_path.push(path);
     trace!("full_path {:?}", full_path);
-    let metadata =full_path.metadata().unwrap();
-    let size: i64 = metadata.len().try_into().unwrap();
-    let modified_at = OffsetDateTime::from(metadata.modified().unwrap());
+    let metadata =full_path.metadata()?;
+    let size: i64 = metadata.len().try_into()?;
+    let time = metadata.modified()?;
+    let modified_at = OffsetDateTime::from(time);
 
-    FileRecordCreateForm {
+    let form = models::CreateForm {
         jid: Some(jid),
         path: path.to_string(),
         size,
         format: "t".to_string(),
         modified_at,
-    }
+    };
+
+    Ok(form)
 }

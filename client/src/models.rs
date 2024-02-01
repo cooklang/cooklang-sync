@@ -23,7 +23,7 @@ pub struct FileRecord {
 #[derive(Insertable, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
-pub struct FileRecordCreateForm {
+pub struct CreateForm {
     pub jid: Option<i32>,
     pub path: String,
     pub format: String,
@@ -54,8 +54,8 @@ pub struct FileRecordDeleteForm {
     pub deleted: bool,
 }
 
-impl PartialEq<FileRecordCreateForm> for FileRecord {
-    fn eq(&self, other: &FileRecordCreateForm) -> bool {
+impl PartialEq<CreateForm> for FileRecord {
+    fn eq(&self, other: &CreateForm) -> bool {
         self.path == other.path
             && self.format == other.format
             && self.size == other.size

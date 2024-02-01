@@ -14,7 +14,7 @@ pub fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::R
     let watcher = RecommendedWatcher::new(
         move |res| {
             futures::executor::block_on(async {
-                tx.send(res).await.unwrap();
+                tx.send(res).await;
             })
         },
         Config::default(),

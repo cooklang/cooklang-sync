@@ -169,6 +169,7 @@ fn build_file_record(path: &Path) -> FileRecordCreateForm {
     let modified_at = OffsetDateTime::from(metadata.modified().unwrap());
 
     FileRecordCreateForm {
+        jid: None,
         path,
         size,
         format: "t".to_string(),

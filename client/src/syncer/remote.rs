@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+
 use bytes::Bytes;
 
 type Result<T, E = reqwest::Error> = std::result::Result<T, E>;
@@ -10,6 +10,12 @@ pub struct ResponseFileRecord {
     pub path: String,
     pub chunk_ids: String,
     pub format: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum CommitResultStatus {
+    Success(i32),
+    NeedChunks(String),
 }
 
 pub struct Remote {
@@ -30,9 +36,9 @@ impl Remote {
 }
 impl Remote {
 
-    pub async fn upload(&self, chunk: String, content: Vec<u8>) -> Result<()>{
+    pub async fn upload(&self, chunk: &str, content: Bytes) -> Result<()>{
         self.client
-            .post(self.api_endpoint.clone() + "/chunks/" + &chunk)
+            .post(self.api_endpoint.clone() + "/chunks/" + chunk)
             .body(content)
             .send()
             .await?;
@@ -40,9 +46,9 @@ impl Remote {
         Ok(())
     }
 
-    pub async fn download(&self, chunk: String) -> Result<Bytes>{
+    pub async fn download(&self, chunk: &str) -> Result<Bytes>{
         let response = self.client
-            .get(self.api_endpoint.clone() + "/chunks/" + &chunk)
+            .get(self.api_endpoint.clone() + "/chunks/" + chunk)
             .send()
             .await?;
 
@@ -60,11 +66,11 @@ impl Remote {
         res.json().await
     }
 
-    pub async fn commit(&self, path: &PathBuf, chunk_ids: &str, format: &str) -> Result<Vec<ResponseFileRecord>> {
+    pub async fn commit(&self, path: &str, chunk_ids: &str, format: &str) -> Result<CommitResultStatus> {
         let params = [
             ("format", format),
             ("chunk_ids", chunk_ids),
-            ("path", &path.to_string_lossy()),
+            ("path", path),
         ];
 
         let res = self.client

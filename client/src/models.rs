@@ -24,6 +24,7 @@ pub struct FileRecord {
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordCreateForm {
+    pub jid: Option<i32>,
     pub path: String,
     pub format: String,
     pub size: i64,

@@ -111,3 +111,5 @@ Role of Chunker is to deal with persistance of hashes and files. It operates on 
 Q:
 - strings will be short, 80-100 symbols. what should be used as hashing function? what size of hash should be? I'd say square root of 10. You can test it!
 
+- empty files should be different from deleted
+

@@ -7,7 +7,7 @@ pub mod models;
 pub mod schema;
 pub mod syncer;
 
-use futures::{channel::mpsc::channel, join, StreamExt};
+use futures::{channel::mpsc::channel, join};
 use notify::{RecursiveMode, Watcher};
 use std::path::PathBuf;
 
@@ -25,12 +25,12 @@ pub async fn run(
     remote_token: &str,
 ) -> Result<(), errors::SyncError> {
     let (mut watcher, local_file_update_rx) = async_watcher()?;
-    let (local_registry_updated_tx, mut local_registry_updated_rx) = channel(CHANNEL_SIZE);
+    let (local_registry_updated_tx, local_registry_updated_rx) = channel(CHANNEL_SIZE);
 
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new();
-    let chunker = Chunker::new(chunk_cache);
-    let remote = syncer::remote::Remote::new(api_endpoint, remote_token);
+    let chunker = &mut Chunker::new(chunk_cache);
+    let remote = &syncer::remote::Remote::new(api_endpoint, remote_token);
 
     let pool = local_db::get_connection_pool(db_file_path);
     debug!("Started connection pool for {:?}", db_file_path);

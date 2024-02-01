@@ -113,3 +113,23 @@ Q:
 
 - empty files should be different from deleted
 
+
+
+TODO
+====
+
+- bundling of uploads/downloads
+- deletion works
+- polling
+- update on indexer notify
+- proper error handling
+- auth
+- namespaces
+- add documentation
+- extract to core shared datasctuctures
+- use LRU in-memory cache instead
+- uniffi bindings
+- support of binary files
+    - by extension select text files, the rest is binary
+- test test test
+- namespacing mounting

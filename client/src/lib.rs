@@ -2,10 +2,11 @@ pub mod chunker;
 pub mod errors;
 pub mod file_watcher;
 pub mod indexer;
-pub mod local_db;
+pub mod registry;
 pub mod models;
 pub mod schema;
 pub mod syncer;
+pub mod remote;
 
 use futures::{channel::mpsc::channel, join};
 use notify::{RecursiveMode, Watcher};
@@ -30,9 +31,9 @@ pub async fn run(
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new();
     let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());
-    let remote = &syncer::remote::Remote::new(api_endpoint, remote_token);
+    let remote = &remote::Remote::new(api_endpoint, remote_token);
 
-    let pool = local_db::get_connection_pool(db_file_path);
+    let pool = registry::get_connection_pool(db_file_path);
     debug!("Started connection pool for {:?}", db_file_path);
 
     watcher.watch(storage_dir, RecursiveMode::Recursive)?;

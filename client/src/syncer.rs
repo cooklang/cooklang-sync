@@ -1,5 +1,3 @@
-pub mod remote;
-
 use futures::{
     channel::mpsc::{Receiver},
     join, StreamExt,
@@ -13,9 +11,10 @@ use tokio::sync::Mutex;
 
 use log::{debug, trace, error};
 
-use crate::local_db::*;
+use crate::registry::*;
 use crate::models::*;
 use crate::chunker::*;
+use crate::remote::*;
 
 const INTERVAL_CHECK_DOWNLOAD_SEC: Duration = Duration::from_secs(23);
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
@@ -23,8 +22,8 @@ const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 pub async fn run(
     pool: &ConnectionPool,
     storage_path: &PathBuf,
-    chunker: &mut Chunker<InMemoryCache>,
-    remote: &remote::Remote,
+    chunker: &mut Chunker,
+    remote: &Remote,
     mut local_registry_updated_rx: Receiver<IndexerUpdateEvent>,
 ) {
     let chunker = Arc::new(Mutex::new(chunker));
@@ -33,7 +32,7 @@ pub async fn run(
         let chunker = Arc::clone(&chunker);
 
         loop {
-            debug!("[syncer] interval scan");
+            debug!("interval scan");
 
             let conn = &mut pool.get().unwrap();
 
@@ -68,7 +67,7 @@ pub async fn run(
         let chunker = Arc::clone(&chunker);
 
         loop {
-            debug!("[syncer] interval scan");
+            debug!("interval scan");
 
             let conn = &mut pool.get().unwrap();
 
@@ -81,11 +80,11 @@ pub async fn run(
                 let r = remote.commit(&f.path, &chunk_ids.join(","), "t").await.unwrap();
 
                 match r {
-                    remote::CommitResultStatus::Success(jid) => {
+                    CommitResultStatus::Success(jid) => {
                         trace!("commited {:?}", jid);
                         update_jid_on_file_record(conn, f, jid);
                     },
-                    remote::CommitResultStatus::NeedChunks(chunks) => {
+                    CommitResultStatus::NeedChunks(chunks) => {
                         trace!("need chunks {:?}", chunks);
                         for c in chunks.split(',') {
                             // TODO bundle multiple into one request

@@ -3,19 +3,49 @@ use std::io::{self, prelude::*, BufReader, BufWriter};
 use bytes::Bytes;
 use sha2::{Sha256, Digest};
 use std::path::{PathBuf};
+use std::collections::HashMap;
 
-mod cache;
 use log::{trace};
 
-pub use cache::{Cache, InMemoryCache};
+pub struct InMemoryCache {
+    cache: HashMap<String, Bytes>,
+}
 
-pub struct Chunker<C: Cache> {
-    cache: C,
+impl InMemoryCache {
+    pub fn new() -> InMemoryCache {
+        InMemoryCache {
+            cache: HashMap::new(),
+        }
+    }
+
+    fn get(&self, chunk_hash: &str) -> io::Result<Bytes> {
+        match self.cache.get(chunk_hash) {
+            Some(content) => Ok(content.clone()),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "Chunk not found in cache",
+            )),
+        }
+    }
+
+    fn set(&mut self, chunk_hash: &str, content: Bytes) -> io::Result<()> {
+        self.cache.insert(chunk_hash.to_string(), content);
+        Ok(())
+    }
+
+    fn contains(&self, chunk_hash: &str) -> bool {
+        self.cache.contains_key(chunk_hash)
+    }
+}
+
+
+pub struct Chunker {
+    cache: InMemoryCache,
     base_path: PathBuf,
 }
 
-impl<C: Cache> Chunker<C> {
-    pub fn new(cache: C, base_path: PathBuf) -> Chunker<C> {
+impl Chunker {
+    pub fn new(cache: InMemoryCache, base_path: PathBuf) -> Chunker {
         Chunker { cache, base_path: base_path }
     }
 
@@ -28,10 +58,11 @@ impl<C: Cache> Chunker<C> {
     pub fn hashify(&mut self, path: &str) -> io::Result<Vec<String>> {
         let file = File::open(self.full_path(path))?;
         let mut reader = BufReader::new(file);
-        let mut hashes = Vec::new();
-
         let mut buffer = Vec::new();
 
+        let mut hashes = Vec::new();
+
+        // TODO should work for
         while reader.read_until(b'\n', &mut buffer)? > 0 {
             let data: Bytes = buffer.clone().into();
             let hash = self.hash(&data);
@@ -41,8 +72,6 @@ impl<C: Cache> Chunker<C> {
             // Clear the buffer for the next line
             buffer.clear();
         }
-
-        trace!("[chunker] hashes {:?}", hashes);
 
         Ok(hashes)
     }
@@ -59,25 +88,21 @@ impl<C: Cache> Chunker<C> {
     }
 
     pub fn save(&mut self, path: &str, hashes: Vec<&str>) -> io::Result<()> {
-        trace!("[chunker] saving {:?}", path);
+        trace!("saving {:?}", path);
         let full_path = self.full_path(path);
         if let Some(parent) = full_path.parent() {
             create_dir_all(parent)?;
         }
 
         let file = File::create(full_path)?;
-        trace!("[chunker] here");
         let mut writer = BufWriter::new(file);
 
 
         for hash in hashes {
-            let chunk = self.cache.get_chunk(hash)?;
-            trace!("[chunker] writing chunk {:?}", chunk);
+            let chunk = self.cache.get(hash)?;
 
             writer.write_all(&chunk)?;
         }
-
-        trace!("[chunker] flush {:?}", writer);
 
         writer.flush()?;
 
@@ -85,16 +110,16 @@ impl<C: Cache> Chunker<C> {
     }
 
     pub fn read_chunk(&self, chunk_hash: &str) -> io::Result<Bytes> {
-        self.cache.get_chunk(chunk_hash)
+        self.cache.get(chunk_hash)
     }
 
     pub fn save_chunk(&mut self, chunk_hash: &str, content: Bytes) -> io::Result<()> {
-        self.cache.set_chunk(chunk_hash, content)
+        self.cache.set(chunk_hash, content)
     }
 
 
     pub fn check_chunk(&self, chunk_hash: &str) -> io::Result<bool> {
-        Ok(self.cache.contains_chunk(chunk_hash))
+        Ok(self.cache.contains(chunk_hash))
     }
 }
 

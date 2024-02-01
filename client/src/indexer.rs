@@ -12,7 +12,7 @@ use tokio::time::Duration;
 
 use log::{debug, error, trace};
 
-use crate::local_db::*;
+use crate::registry::*;
 use crate::models::*;
 
 type DBFiles = HashMap<String, FileRecord>;

@@ -100,8 +100,11 @@ pub async fn run(
             // need to wait only if we didn't upload anything
             // otherwise it should re-run immideately
             if to_upload.is_empty() {
-                // TODO not quite
-                join!(tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC), local_registry_updated_rx.next());
+                // TODO test that it doesn't cancle stream
+                tokio::select! {
+                    _ = tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC) => {},
+                    Some(_) = local_registry_updated_rx.next() => {},
+                };
             }
         }
     };

@@ -120,10 +120,13 @@ TODO
 
 - bundling of uploads/downloads
 - deletion works
-- polling
-- update on indexer notify
+- polling server
+- updates on indexer notify
 - proper error handling
+- proper join to support first to fire
 - auth
+- debounced events
+- read-only
 - namespaces
 - add documentation
 - extract to core shared datasctuctures
@@ -132,6 +135,6 @@ TODO
 - support of binary files
     - by extension select text files, the rest is binary
 - test test test
-- namespacing mounting
+- namespace mounting
 - filter stream events to propagate only required files
 -

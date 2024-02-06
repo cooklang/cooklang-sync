@@ -1,6 +1,6 @@
 use futures::{
     channel::mpsc::{Receiver, Sender},
-    join, SinkExt, StreamExt,
+    SinkExt, FutureExt, StreamExt,
 };
 use std::collections::HashMap;
 use std::path::Path;
@@ -53,7 +53,11 @@ pub async fn run(
             updated_tx.send(IndexerUpdateEvent::Updated).await;
         }
 
-        join!(tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC), local_file_update_rx.next());
+        tokio::select! {
+            _ = tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC) => {},
+            // TODO make sure it doesn't stop watching
+            Some(_) = local_file_update_rx.next() => {},
+        };
     }
 
 }

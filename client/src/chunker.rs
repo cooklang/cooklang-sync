@@ -97,6 +97,12 @@ pub struct InMemoryCache {
     cache: HashMap<String, Bytes>,
 }
 
+impl Default for InMemoryCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryCache {
     pub fn new() -> InMemoryCache {
         InMemoryCache {

@@ -2,11 +2,14 @@ use rocket::fairing::AdHoc;
 use rocket::form::{Form, FromForm};
 use rocket::response::Debug;
 use rocket::serde::{json::Json, Deserialize, Serialize};
-use rocket::{Build, Rocket};
+use rocket::{Build, Rocket, State};
 
 use rocket_sync_db_pools::database;
-
 use diesel::prelude::*;
+
+use async_notify::Notify;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration};
 
 use crate::chunk_id::ChunkId;
 use crate::models::*;
@@ -33,16 +36,24 @@ enum CommitResultStatus {
     NeedChunks(String),
 }
 
+
+struct ActiveUsers {
+    notification: Arc<Notify>
+}
+
 // check if all hashes are present
 // if any not present return back need more and list of hashes
 // if present all insert into db path and chunk hashes and return back a new jid
 #[post("/commit", data = "<commit_payload>")]
 async fn commit(
+    users: &State<Mutex<ActiveUsers>>,
     db: Db,
     commit_payload: Form<CommitPayload<'_>>,
 ) -> Result<Json<CommitResultStatus>> {
     debug_!("commit payload {:?}", commit_payload);
     let desired: Vec<&str> = commit_payload.chunk_ids.split(',').collect();
+
+    let notification = users.lock().unwrap().notification.clone();
 
     let to_be_uploaded: Vec<ChunkId> = desired
         .into_iter()
@@ -66,12 +77,16 @@ async fn commit(
             })
             .await?;
 
+        notification.notify();
+
         Ok(Json(CommitResultStatus::Success(id)))
     } else {
         let to_be_uploaded_strings: Vec<String> = to_be_uploaded
             .iter()
             .map(|chunk_id| chunk_id.0.to_string())
             .collect();
+
+        notification.notify();
 
         Ok(Json(CommitResultStatus::NeedChunks(
             to_be_uploaded_strings.join(","),
@@ -95,6 +110,16 @@ async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
     Ok(Json(records))
 }
 
+#[get("/poll?<seconds>")]
+async fn poll(users: &State<Mutex<ActiveUsers>>, seconds: u64) -> String {
+    let notification = users.lock().unwrap().notification.clone();
+
+    match tokio::time::timeout(Duration::from_secs(seconds), notification.notified()).await {
+        Ok(_) => "Done".to_string(),
+        Err(_) => "Timeout".to_string()
+    }
+}
+
 async fn run_migrations(rocket: Rocket<Build>) -> Rocket<Build> {
     use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 
@@ -114,9 +139,12 @@ async fn run_migrations(rocket: Rocket<Build>) -> Rocket<Build> {
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Diesel SQLite Stage", |rocket| async {
+        let users = Mutex::new(ActiveUsers { notification: Arc::new(Notify::new()) });
+
         rocket
             .attach(Db::fairing())
             .attach(AdHoc::on_ignite("Diesel Migrations", run_migrations))
-            .mount("/metadata", routes![commit, list])
+            .mount("/metadata", routes![commit, list, poll])
+            .manage(users)
     })
 }

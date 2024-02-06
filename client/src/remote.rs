@@ -67,6 +67,17 @@ impl Remote {
         res.json().await
     }
 
+    pub async fn poll(&self, seconds: i32) -> Result<()> {
+        let seconds_string = seconds.to_string();
+
+        let res = self.client
+            .get(self.api_endpoint.clone() + "/metadata/poll?seconds=" + &seconds_string)
+            .send()
+            .await?;
+
+        res.json().await
+    }
+
     pub async fn commit(&self, path: &str, deleted: bool, chunk_ids: &str, format: &str) -> Result<CommitResultStatus> {
         let params = [
             ("format", format),

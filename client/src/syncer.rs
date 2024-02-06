@@ -69,7 +69,10 @@ pub async fn run(
                 }
             }
 
-            tokio::time::sleep(INTERVAL_CHECK_DOWNLOAD_SEC).await;
+            tokio::select! {
+                _ = tokio::time::sleep(INTERVAL_CHECK_DOWNLOAD_SEC) => {},
+                _ = remote.poll(60) => {},
+            }
         }
     };
 

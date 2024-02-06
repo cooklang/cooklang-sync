@@ -16,3 +16,5 @@ rocket_sync_db_pools = { version = "0.1.0-rc.2", features = [ "diesel_sqlite_poo
 diesel = { version = "2", features = ["returning_clauses_for_sqlite_3_35", "sqlite", "r2d2"] }
 diesel_migrations = "2"
 rusqlite = { version = "0.30.0", features = ["bundled"] }
+async-notify = "0.3.0"
+tokio = { version = "1.36.0", features = ["time"] }

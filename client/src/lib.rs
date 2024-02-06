@@ -30,7 +30,7 @@ pub async fn run(
     let (local_registry_updated_tx, local_registry_updated_rx) = channel(CHANNEL_SIZE);
 
     let storage_dir = &PathBuf::from(storage_dir);
-    let chunk_cache = InMemoryCache::new();
+    let chunk_cache = InMemoryCache::new(1000, 100_000_000);
     let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());
     let remote = &remote::Remote::new(api_endpoint, remote_token);
 

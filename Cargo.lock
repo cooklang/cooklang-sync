@@ -24,6 +24,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77c3a9648d43b9cd48db467b3f87fdd6e146bcc88ab0180006cef2179fe11d01"
 dependencies = [
  "cfg-if",
+ "getrandom",
  "once_cell",
  "version_check",
  "zerocopy",
@@ -296,6 +297,7 @@ dependencies = [
  "log",
  "notify",
  "notify-debouncer-full",
+ "quick_cache",
  "reqwest",
  "rusqlite",
  "serde",
@@ -1345,6 +1347,18 @@ dependencies = [
  "syn",
  "version_check",
  "yansi",
+]
+
+[[package]]
+name = "quick_cache"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "58c20af3800cee5134b79a3bd4a3d4b583c16ccfa5f53338f46400851a5b3819"
+dependencies = [
+ "ahash",
+ "equivalent",
+ "hashbrown",
+ "parking_lot",
 ]
 
 [[package]]

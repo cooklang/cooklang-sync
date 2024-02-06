@@ -8,10 +8,13 @@ use sha2::{Sha256, Digest};
 
 use log::{trace};
 
+use quick_cache::{Weighter, sync::Cache};
+
 pub struct Chunker {
     cache: InMemoryCache,
     base_path: PathBuf,
 }
+
 
 impl Chunker {
     pub fn new(cache: InMemoryCache, base_path: PathBuf) -> Chunker {
@@ -93,20 +96,25 @@ impl Chunker {
 }
 
 
-pub struct InMemoryCache {
-    cache: HashMap<String, Bytes>,
-}
+#[derive(Clone)]
+pub struct BytesWeighter;
 
-impl Default for InMemoryCache {
-    fn default() -> Self {
-        Self::new()
+impl Weighter<String, Bytes> for BytesWeighter {
+    fn weight(&self, _key: &String, val: &Bytes) -> u32 {
+        // Be cautions out about zero weights!
+        val.len().clamp(1, u32::MAX as usize) as u32
     }
 }
 
+
+pub struct InMemoryCache {
+    cache: Cache<String, Bytes, BytesWeighter>
+}
+
 impl InMemoryCache {
-    pub fn new() -> InMemoryCache {
+    pub fn new(total_keys: usize, total_weight: u64) -> InMemoryCache {
         InMemoryCache {
-            cache: HashMap::new(),
+            cache: Cache::with_weighter(total_keys, total_weight, BytesWeighter)
         }
     }
 
@@ -126,6 +134,9 @@ impl InMemoryCache {
     }
 
     fn contains(&self, chunk_hash: &str) -> bool {
-        self.cache.contains_key(chunk_hash)
+        match self.cache.get(chunk_hash) {
+            Some(content) => true,
+            None => false,
+        }
     }
 }

@@ -118,11 +118,14 @@ Q:
 TODO
 ====
 
-- bundling of uploads/downloads
 - deletion works
 - polling server
+- bundling of uploads/downloads
+- uniffi bindings
 - updates on indexer notify
 - proper error handling
+- can be issue that chunk is not in cache when we try to write file
+- report error on unexpeted cache behaviour
 - proper join to support first to fire
 - auth
 - debounced events
@@ -130,11 +133,9 @@ TODO
 - namespaces
 - add documentation
 - extract to core shared datasctuctures
-- use LRU in-memory cache instead
-- uniffi bindings
+- filter stream events to propagate only required files
 - support of binary files
     - by extension select text files, the rest is binary
 - test test test
 - namespace mounting
-- filter stream events to propagate only required files
 -

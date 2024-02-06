@@ -15,21 +15,20 @@ pub fn create(conn: &mut Connection, forms: &Vec<CreateForm>) -> Result<usize> {
     insert_into(file_records::table).values(forms).execute(conn)
 }
 
-pub fn update_jid(conn: &mut Connection, file_record: &FileRecord, jid: i32) -> Result<usize> {
-    trace!("update_jid {:?}: {:?}", jid, file_record);
+pub fn update_jid(conn: &mut Connection, record: &FileRecord, jid: i32) -> Result<usize> {
+    trace!("update_jid {:?}: {:?}", jid, record);
 
     update(file_records::table)
-        .filter(file_records::id.eq(file_record.id))
+        .filter(file_records::id.eq(record.id))
         .set(file_records::jid.eq(jid))
         .execute(conn)
 }
 
-pub fn delete(conn: &mut Connection, ids: &Vec<i32>) -> Result<usize> {
-    trace!("marking as deleted ids {:?}", ids);
+pub fn delete(conn: &mut Connection, forms: &Vec<DeleteForm>) -> Result<usize> {
+    trace!("marking as deleted {:?}", forms);
 
-    update(file_records::table)
-        .filter(file_records::id.eq_any(ids))
-        .set(file_records::deleted.eq(true))
+    insert_into(file_records::table)
+        .values(forms)
         .execute(conn)
 }
 
@@ -43,13 +42,12 @@ pub fn non_deleted(conn: &mut Connection) -> Result<Vec<FileRecord>> {
         .load::<FileRecord>(conn)
 }
 
-/// Files that don't have jid and not deleted
+/// Files that don't have jid
 /// These should be send to remote
 pub fn updated_locally(conn: &mut Connection) -> Result<Vec<FileRecord>> {
-    trace!("non_deleted");
+    trace!("updated_locally");
 
     file_records::table
-        .filter(file_records::deleted.eq(false))
         .filter(file_records::jid.is_null())
         .select(FileRecord::as_select())
         .order(file_records::id.desc())

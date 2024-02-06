@@ -43,7 +43,7 @@ pub async fn run(
             let conn = &mut get_connection(pool)?;
 
             if !to_remove.is_empty() {
-                registry::delete(conn, &to_remove.iter().map(|r| r.id).collect())?;
+                registry::delete(conn, &to_remove)?;
             }
 
             if !to_add.is_empty() {
@@ -110,20 +110,20 @@ fn get_file_records_from_registry(pool: &ConnectionPool) -> Result<DBFiles,SyncE
 fn compare_records(
     from_db: DBFiles,
     from_fs: DiskFiles,
-) -> (Vec<FileRecord>, Vec<CreateForm>) {
-    let mut to_remove: Vec<FileRecord> = Vec::new();
+) -> (Vec<DeleteForm>, Vec<CreateForm>) {
+    let mut to_remove: Vec<DeleteForm> = Vec::new();
     let mut to_add: Vec<CreateForm> = Vec::new();
 
     for (p, db_file) in &from_db {
         match from_fs.get(p) {
             Some(disk_file) => {
                 if db_file != disk_file {
-                    to_remove.push(db_file.clone());
+                    to_remove.push(build_delete_form(db_file));
                     to_add.push(disk_file.clone());
                 }
             }
             None => {
-                to_remove.push(db_file.clone());
+                to_remove.push(build_delete_form(db_file));
             }
         }
     }
@@ -155,4 +155,14 @@ fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm,SyncError> {
 
     Ok(f)
 
+}
+
+fn build_delete_form(record: &FileRecord) -> DeleteForm {
+    DeleteForm {
+        path: record.path.to_string(),
+        deleted: true,
+        size: record.size,
+        format: record.format.to_string(),
+        modified_at: record.modified_at,
+    }
 }

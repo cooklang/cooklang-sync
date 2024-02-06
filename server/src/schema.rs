@@ -3,8 +3,8 @@
 diesel::table! {
     file_records (id) {
         id -> Integer,
-        deleted -> Bool,
         path -> Text,
+        deleted -> Bool,
         chunk_ids -> Text,
         format -> Text,
     }

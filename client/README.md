@@ -118,7 +118,6 @@ Q:
 TODO
 ====
 
-- deletion works
 - polling server
 - bundling of uploads/downloads
 - uniffi bindings
@@ -138,4 +137,7 @@ TODO
     - by extension select text files, the rest is binary
 - test test test
 - namespace mounting
--
+- draw data-flow
+- garbage collection
+- auto-update
+- make sure non-blocking behavour

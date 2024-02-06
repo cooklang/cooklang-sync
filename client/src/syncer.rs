@@ -34,32 +34,39 @@ pub async fn run(
         let chunker = Arc::clone(&chunker);
 
         loop {
-            debug!("interval scan");
+            debug!("download scan");
 
             let conn = &mut get_connection(pool).unwrap();
 
             let latest_local = registry::latest_jid(conn).unwrap_or(0);
             let to_download = remote.list(latest_local).await.unwrap();
 
-            // TODO dowload chunks and create records in registry
             for d in &to_download {
-                trace!("interval_check_download {:?}", d);
+                trace!("to be downloaded {:?}", d);
 
-                let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
                 let mut chunker = chunker.lock().await;
 
-                for c in &chunks {
-                    if !chunker.check_chunk(c).unwrap() {
-                        chunker.save_chunk(c, remote.download(c).await.unwrap());
+                if d.deleted {
+                    let form = build_delete_form(&d.path, storage_path, d.id);
+                    // TODO atomic?
+                    chunker.delete(&d.path);
+                    registry::delete(conn, &vec![form]);
+                } else {
+                    let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
+
+                    for c in &chunks {
+                        if !chunker.check_chunk(c).unwrap() {
+                            chunker.save_chunk(c, remote.download(c).await.unwrap());
+                        }
                     }
-                }
 
-                if let Err(e) = chunker.save(&d.path, chunks) {
-                    error!("{:?}", e);
-                }
+                    if let Err(e) = chunker.save(&d.path, chunks) {
+                        error!("{:?}", e);
+                    }
 
-                let form = build_file_record(&d.path, storage_path, d.id).unwrap();
-                registry::create(conn, &vec![form]);
+                    let form = build_file_record(&d.path, storage_path, d.id).unwrap();
+                    registry::create(conn, &vec![form]);
+                }
             }
 
             tokio::time::sleep(INTERVAL_CHECK_DOWNLOAD_SEC).await;
@@ -70,7 +77,7 @@ pub async fn run(
         let chunker = Arc::clone(&chunker);
 
         loop {
-            debug!("interval scan");
+            debug!("upload scan");
 
             let conn = &mut get_connection(pool).unwrap();
 
@@ -78,9 +85,14 @@ pub async fn run(
 
             for f in &to_upload {
                 let mut chunker = chunker.lock().await;
-                let chunk_ids = chunker.hashify(&f.path).unwrap();
+                let mut chunk_ids = vec![String::from("")];
+
+                if !f.deleted {
+                    chunk_ids = chunker.hashify(&f.path).unwrap();
+                }
+
                 trace!("interval_check_upload {:?} {:?}", f, chunk_ids);
-                let r = remote.commit(&f.path, &chunk_ids.join(","), "t").await.unwrap();
+                let r = remote.commit(&f.path, f.deleted, &chunk_ids.join(","), "t").await.unwrap();
 
                 match r {
                     CommitResultStatus::Success(jid) => {
@@ -117,7 +129,6 @@ pub async fn run(
 fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm,SyncError> {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
-    trace!("full_path {:?}", full_path);
     let metadata =full_path.metadata()?;
     let size: i64 = metadata.len().try_into()?;
     let time = metadata.modified()?;
@@ -132,4 +143,17 @@ fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::Create
     };
 
     Ok(form)
+}
+
+fn build_delete_form(path: &str, base: &Path, jid: i32) -> models::DeleteForm {
+    let mut full_path = base.to_path_buf();
+    full_path.push(path);
+
+    models::DeleteForm {
+        path: path.to_string(),
+        deleted: true,
+        size: 0,
+        format: "t".to_string(),
+        modified_at: OffsetDateTime::now_utc()
+    }
 }

@@ -31,6 +31,17 @@ pub struct CreateForm {
     pub modified_at: OffsetDateTime,
 }
 
+#[derive(Insertable, Clone, Debug)]
+#[diesel(table_name = file_records)]
+#[diesel(check_for_backend(diesel::sqlite::Sqlite))]
+pub struct DeleteForm {
+    pub path: String,
+    pub format: String,
+    pub size: i64,
+    pub modified_at: OffsetDateTime,
+    pub deleted: bool,
+}
+
 #[derive(AsChangeset, Clone, Debug)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]

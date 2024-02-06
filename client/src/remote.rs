@@ -8,6 +8,7 @@ type Result<T, E = reqwest::Error> = std::result::Result<T, E>;
 pub struct ResponseFileRecord {
     pub id: i32,
     pub path: String,
+    pub deleted: bool,
     pub chunk_ids: String,
     pub format: String,
 }
@@ -66,9 +67,10 @@ impl Remote {
         res.json().await
     }
 
-    pub async fn commit(&self, path: &str, chunk_ids: &str, format: &str) -> Result<CommitResultStatus> {
+    pub async fn commit(&self, path: &str, deleted: bool, chunk_ids: &str, format: &str) -> Result<CommitResultStatus> {
         let params = [
             ("format", format),
+            ("deleted", if deleted { "true" } else { "false" }),
             ("chunk_ids", chunk_ids),
             ("path", path),
         ];

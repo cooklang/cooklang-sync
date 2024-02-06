@@ -21,6 +21,7 @@ type Result<T, E = Debug<diesel::result::Error>> = std::result::Result<T, E>;
 #[derive(FromForm)]
 struct CommitPayload<'r> {
     path: &'r str,
+    deleted: bool,
     chunk_ids: &'r str,
     format: &'r str,
 }
@@ -40,6 +41,7 @@ async fn commit(
     db: Db,
     commit_payload: Form<CommitPayload<'_>>,
 ) -> Result<Json<CommitResultStatus>> {
+    debug_!("commit payload {:?}", commit_payload);
     let desired: Vec<&str> = commit_payload.chunk_ids.split(',').collect();
 
     let to_be_uploaded: Vec<ChunkId> = desired
@@ -51,6 +53,7 @@ async fn commit(
     if to_be_uploaded.is_empty() {
         let r = NewFileRecord {
             path: commit_payload.path.into(),
+            deleted: commit_payload.deleted,
             chunk_ids: commit_payload.chunk_ids.into(),
             format: commit_payload.format.into(),
         };
@@ -79,6 +82,7 @@ async fn commit(
 // return back array of jid, path, hashes for all jid since requested
 #[get("/list?<jid>")]
 async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
+    debug_!("list after {:?}", jid);
     let records: Vec<FileRecord> = db
         .run(move |conn| {
             file_records::table

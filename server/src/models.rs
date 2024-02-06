@@ -9,6 +9,7 @@ use rocket::serde::{Deserialize, Serialize};
 pub struct FileRecord {
     pub id: i32,
     pub path: String,
+    pub deleted: bool,
     pub chunk_ids: String,
     pub format: String,
 }
@@ -20,5 +21,6 @@ pub struct FileRecord {
 pub struct NewFileRecord {
     pub path: String,
     pub chunk_ids: String,
+    pub deleted: bool,
     pub format: String,
 }

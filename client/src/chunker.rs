@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs::{File, create_dir_all};
 use std::io::{self, prelude::*, BufReader, BufWriter};
 use std::path::{PathBuf};
+use std::fs;
 
 use bytes::Bytes;
 use sha2::{Sha256, Digest};
@@ -77,6 +78,16 @@ impl Chunker {
         }
 
         writer.flush()?;
+
+        Ok(())
+    }
+
+    pub fn delete(&mut self, path: &str) -> io::Result<()> {
+        trace!("deleting {:?}", path);
+        let full_path = self.full_path(path);
+
+        // TODO delete folders up too
+        fs::remove_file(full_path)?;
 
         Ok(())
     }

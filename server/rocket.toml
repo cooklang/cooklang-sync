@@ -12,3 +12,7 @@ limits = { json = "10MiB" }
 [default.databases.diesel]
 url = "db/server.sqlite3"
 timeout = 10
+
+
+[development]
+log = "trace"

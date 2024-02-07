@@ -20,6 +20,9 @@ use crate::file_watcher::async_watcher;
 
 const CHANNEL_SIZE: usize = 100;
 
+uniffi::setup_scaffolding!();
+
+#[uniffi::export]
 pub async fn run(
     storage_dir: &str,
     db_file_path: &str,

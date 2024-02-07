@@ -118,23 +118,21 @@ Q:
 TODO
 ====
 - bundling of uploads/downloads
-- uniffi bindings
-- proper error handling
 - can be issue that chunk is not in cache when we try to write file
-- report error on unexpeted cache behaviour
-- auth
-- read-only
 - namespaces
+- auth
+- proper error handling
+- report error on unexpeted cache behaviour
+- read-only
+- namespace mounting
+- make it work whenb offline
+- garbage collection
+- make sure non-blocking behavour
 - add documentation
 - extract to core shared datasctuctures
-- filter stream events to propagate only required files
 - support of binary files
     - by extension select text files, the rest is binary
 - test test test
-- namespace mounting
 - metrics for monitoring (cache saturation, miss)
 - draw data-flow
-- garbage collection
 - auto-update
-- make sure non-blocking behavour
-- make it work whenb offline

@@ -9,6 +9,9 @@ edition = "2021"
 path = "src/main.rs"
 name = "client"
 
+# [lib]
+# crate-type = ["cdylib", "staticlib"]
+
 [dependencies]
 blake3 = "1.5.0"
 bytes = "1.5.0"
@@ -29,4 +32,5 @@ serde_json = "1.0.113"
 sha2 = "0.10.8"
 time = { version = "0.3.31", features = ["std"] }
 tokio = { version = "1.35.1", features = ["time", "full"] }
+uniffi = "0.26.1"
 walkdir = "2.4.0"

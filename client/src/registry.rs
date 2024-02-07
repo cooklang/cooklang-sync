@@ -1,5 +1,6 @@
 use diesel::prelude::*;
 use diesel::{insert_into, update};
+use diesel::dsl::{max,sql};
 
 use log::{trace};
 
@@ -38,7 +39,7 @@ pub fn non_deleted(conn: &mut Connection) -> Result<Vec<FileRecord>> {
     file_records::table
         .filter(file_records::deleted.eq(false))
         .select(FileRecord::as_select())
-        .order(file_records::id.desc())
+        .order(file_records::id.asc())
         .load::<FileRecord>(conn)
 }
 
@@ -47,11 +48,21 @@ pub fn non_deleted(conn: &mut Connection) -> Result<Vec<FileRecord>> {
 pub fn updated_locally(conn: &mut Connection) -> Result<Vec<FileRecord>> {
     trace!("updated_locally");
 
-    file_records::table
-        .filter(file_records::jid.is_null())
+    let subquery = file_records::table
+        .group_by(file_records::path)
+        .select(max(file_records::id))
+        .into_boxed()
+        .select(sql::<diesel::sql_types::Integer>("max(id)"));
+    // TODO can have duplicates
+    // Need to ignore records which come after record with jid
+    // for the same path
+    let query = file_records::table
         .select(FileRecord::as_select())
-        .order(file_records::id.desc())
-        .load::<FileRecord>(conn)
+        .filter(file_records::jid.is_null())
+        .filter(file_records::id.eq_any(subquery))
+        .order(file_records::id.asc());
+
+    query.load::<FileRecord>(conn)
 }
 
 

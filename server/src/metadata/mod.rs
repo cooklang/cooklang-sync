@@ -115,8 +115,12 @@ async fn poll(users: &State<Mutex<ActiveUsers>>, seconds: u64) -> String {
     let notification = users.lock().unwrap().notification.clone();
 
     match tokio::time::timeout(Duration::from_secs(seconds), notification.notified()).await {
-        Ok(_) => "Done".to_string(),
-        Err(_) => "Timeout".to_string()
+        Ok(_) => {
+            "Done".to_string()
+        },
+        Err(_) => {
+            "Timeout".to_string()
+        }
     }
 }
 

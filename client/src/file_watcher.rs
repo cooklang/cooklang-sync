@@ -2,23 +2,21 @@ use futures::{
     channel::mpsc::{channel, Receiver},
     SinkExt,
 };
-use notify::{Config, Event, RecommendedWatcher, Watcher};
+use notify_debouncer_mini::{notify::*,new_debouncer,DebounceEventResult,Debouncer};
+use std::time::Duration;
+
 
 const CHANNEL_SIZE: usize = 1000;
+const DEBOUNCE_SEC: u64 = 2;
 
-pub fn async_watcher() -> notify::Result<(RecommendedWatcher, Receiver<notify::Result<Event>>)> {
+pub fn async_watcher() -> notify::Result<(Debouncer<FsEventWatcher>, Receiver<DebounceEventResult>)> {
     let (mut tx, rx) = channel(CHANNEL_SIZE);
 
-    // Automatically select the best implementation for your platform.
-    // You can also access each implementation directly e.g. INotifyWatcher.
-    let watcher = RecommendedWatcher::new(
-        move |res| {
-            futures::executor::block_on(async {
-                tx.send(res).await;
-            })
-        },
-        Config::default(),
-    )?;
+    let debouncer = new_debouncer(Duration::from_secs(DEBOUNCE_SEC), move |res: DebounceEventResult| {
+        futures::executor::block_on(async {
+            tx.send(res).await;
+        })
+    })?;
 
-    Ok((watcher, rx))
+    Ok((debouncer, rx))
 }

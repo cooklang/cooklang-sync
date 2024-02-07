@@ -10,7 +10,7 @@ pub mod remote;
 pub mod connection;
 
 use futures::{channel::mpsc::channel, join};
-use notify::{RecursiveMode, Watcher};
+use notify::{RecursiveMode};
 use std::path::PathBuf;
 
 use log::debug;
@@ -26,7 +26,7 @@ pub async fn run(
     api_endpoint: &str,
     remote_token: &str,
 ) -> Result<(), errors::SyncError> {
-    let (mut watcher, local_file_update_rx) = async_watcher()?;
+    let (mut debouncer, local_file_update_rx) = async_watcher()?;
     let (local_registry_updated_tx, local_registry_updated_rx) = channel(CHANNEL_SIZE);
 
     let storage_dir = &PathBuf::from(storage_dir);
@@ -37,7 +37,7 @@ pub async fn run(
     let pool = connection::get_connection_pool(db_file_path)?;
     debug!("Started connection pool for {:?}", db_file_path);
 
-    watcher.watch(storage_dir, RecursiveMode::Recursive)?;
+    debouncer.watcher().watch(storage_dir, RecursiveMode::Recursive)?;
     debug!("Started watcher on {:?}", storage_dir);
 
     let indexer = indexer::run(

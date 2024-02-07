@@ -117,17 +117,12 @@ Q:
 
 TODO
 ====
-
-- polling server
 - bundling of uploads/downloads
 - uniffi bindings
-- updates on indexer notify
 - proper error handling
 - can be issue that chunk is not in cache when we try to write file
 - report error on unexpeted cache behaviour
-- proper join to support first to fire
 - auth
-- debounced events
 - read-only
 - namespaces
 - add documentation
@@ -137,7 +132,9 @@ TODO
     - by extension select text files, the rest is binary
 - test test test
 - namespace mounting
+- metrics for monitoring (cache saturation, miss)
 - draw data-flow
 - garbage collection
 - auto-update
 - make sure non-blocking behavour
+- make it work whenb offline

@@ -27,6 +27,7 @@ pub struct CreateForm {
     pub jid: Option<i32>,
     pub path: String,
     pub format: String,
+    pub deleted: bool,
     pub size: i64,
     pub modified_at: OffsetDateTime,
 }

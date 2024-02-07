@@ -1,12 +1,13 @@
 use futures::{
     channel::mpsc::{Receiver, Sender},
-    SinkExt, FutureExt, StreamExt,
+    SinkExt, StreamExt,
 };
 use std::collections::HashMap;
 use std::path::Path;
 use walkdir::WalkDir;
 
-use notify::Event;
+
+use notify_debouncer_mini::DebounceEventResult;
 use time::OffsetDateTime;
 use tokio::time::Duration;
 
@@ -22,10 +23,17 @@ type DiskFiles = HashMap<String, CreateForm>;
 
 const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(61);
 
+/// Indexer main loop. It doesn't manipulate files, but only
+/// compares what we have on a disk with what we have in DB.
+/// If it finds a difference it will update DB records.
+/// When any change made it will send a message in channel
+/// that Syncer is listening.
+///
+/// It runs both on interval and on any event coming from FS watcher.
 pub async fn run(
     pool: &ConnectionPool,
     storage_path: &Path,
-    mut local_file_update_rx: Receiver<Result<Event, notify::Error>>,
+    mut local_file_update_rx: Receiver<DebounceEventResult>,
     mut updated_tx: Sender<IndexerUpdateEvent>,
 ) -> Result<(), SyncError> {
 
@@ -116,12 +124,17 @@ fn compare_records(
 
     for (p, db_file) in &from_db {
         match from_fs.get(p) {
+            // When file from DB is also present on a disk
+            // we need to check if it was changed and if it was
+            // remove and add file again.
             Some(disk_file) => {
                 if db_file != disk_file {
-                    to_remove.push(build_delete_form(db_file));
+                    // to_remove.push(build_delete_form(db_file));
                     to_add.push(disk_file.clone());
                 }
             }
+            // When file from DB is not present on a disk
+            // we should mark it as deleted in DB
             None => {
                 to_remove.push(build_delete_form(db_file));
             }
@@ -148,6 +161,7 @@ fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm,SyncError> {
     let f = CreateForm {
         jid: None,
         path,
+        deleted: false,
         size,
         format: "t".to_string(),
         modified_at,

@@ -18,7 +18,7 @@ use crate::errors::SyncError;
 use crate::chunker::Chunker;
 use crate::remote::{Remote, CommitResultStatus};
 
-const INTERVAL_CHECK_DOWNLOAD_SEC: Duration = Duration::from_secs(23);
+const INTERVAL_CHECK_DOWNLOAD_SEC: i32 = 23;
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 
 pub async fn run(
@@ -30,7 +30,10 @@ pub async fn run(
 ) {
     let chunker = Arc::new(Mutex::new(chunker));
 
-    let interval_check_download = async {
+    // wait for indexer to work first
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    let check_download = async {
         let chunker = Arc::clone(&chunker);
 
         loop {
@@ -60,6 +63,7 @@ pub async fn run(
                         }
                     }
 
+                    // TODO atomic? store in tmp first and then move?
                     if let Err(e) = chunker.save(&d.path, chunks) {
                         error!("{:?}", e);
                     }
@@ -69,14 +73,11 @@ pub async fn run(
                 }
             }
 
-            tokio::select! {
-                _ = tokio::time::sleep(INTERVAL_CHECK_DOWNLOAD_SEC) => {},
-                _ = remote.poll(60) => {},
-            }
+            remote.poll(INTERVAL_CHECK_DOWNLOAD_SEC).await;
         }
     };
 
-    let interval_check_upload = async {
+    let check_upload = async {
         let chunker = Arc::clone(&chunker);
 
         loop {
@@ -86,6 +87,8 @@ pub async fn run(
 
             let to_upload = registry::updated_locally(conn).unwrap();
 
+            trace!("to_upload {:?}", to_upload);
+
             for f in &to_upload {
                 let mut chunker = chunker.lock().await;
                 let mut chunk_ids = vec![String::from("")];
@@ -94,7 +97,7 @@ pub async fn run(
                     chunk_ids = chunker.hashify(&f.path).unwrap();
                 }
 
-                trace!("interval_check_upload {:?} {:?}", f, chunk_ids);
+                trace!("check_upload {:?} {:?}", f, chunk_ids);
                 let r = remote.commit(&f.path, f.deleted, &chunk_ids.join(","), "t").await.unwrap();
 
                 match r {
@@ -124,9 +127,7 @@ pub async fn run(
         }
     };
 
-    // remote_polling to change from remote to local
-
-    join!(interval_check_download, interval_check_upload);
+    join!(check_download, check_upload);
 }
 
 fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm,SyncError> {
@@ -140,6 +141,7 @@ fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::Create
     let form = models::CreateForm {
         jid: Some(jid),
         path: path.to_string(),
+        deleted: false,
         size,
         format: "t".to_string(),
         modified_at,
@@ -148,7 +150,7 @@ fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::Create
     Ok(form)
 }
 
-fn build_delete_form(path: &str, base: &Path, jid: i32) -> models::DeleteForm {
+fn build_delete_form(path: &str, base: &Path, _jid: i32) -> models::DeleteForm {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
 

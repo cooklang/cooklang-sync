@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 use std::fs::{File, create_dir_all};
 use std::io::{self, prelude::*, BufReader, BufWriter};
 use std::path::{PathBuf};
@@ -146,7 +146,7 @@ impl InMemoryCache {
 
     fn contains(&self, chunk_hash: &str) -> bool {
         match self.cache.get(chunk_hash) {
-            Some(content) => true,
+            Some(_content) => true,
             None => false,
         }
     }

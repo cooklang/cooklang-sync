@@ -6,10 +6,13 @@ use rocket::{Build, Rocket, State};
 
 use rocket_sync_db_pools::database;
 use diesel::prelude::*;
+use diesel::dsl::{max,sql};
 
 use async_notify::Notify;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration};
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
 use crate::chunk_id::ChunkId;
 use crate::models::*;
@@ -37,23 +40,41 @@ enum CommitResultStatus {
 }
 
 
-struct ActiveUsers {
-    notification: Arc<Notify>
+struct Client {
+    uuid: String,
+    notification: Arc<Notify>,
+}
+
+impl PartialEq for Client {
+    fn eq(&self, other: &Self) -> bool {
+        self.uuid == other.uuid
+    }
+}
+
+impl Eq for Client {}
+
+impl Hash for Client {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.uuid.hash(state);
+    }
+}
+
+struct ActiveClients {
+    clients: HashSet<Client>
 }
 
 // check if all hashes are present
 // if any not present return back need more and list of hashes
 // if present all insert into db path and chunk hashes and return back a new jid
-#[post("/commit", data = "<commit_payload>")]
+#[post("/commit?<uuid>", data = "<commit_payload>")]
 async fn commit(
-    users: &State<Mutex<ActiveUsers>>,
+    clients: &State<Mutex<ActiveClients>>,
     db: Db,
+    uuid: String,
     commit_payload: Form<CommitPayload<'_>>,
 ) -> Result<Json<CommitResultStatus>> {
     debug_!("commit payload {:?}", commit_payload);
     let desired: Vec<&str> = commit_payload.chunk_ids.split(',').collect();
-
-    let notification = users.lock().unwrap().notification.clone();
 
     let to_be_uploaded: Vec<ChunkId> = desired
         .into_iter()
@@ -77,7 +98,18 @@ async fn commit(
             })
             .await?;
 
-        notification.notify();
+        let notifications: Vec<Arc<Notify>> = clients
+            .lock()
+            .unwrap()
+            .clients
+            .iter()
+            .filter(|client| client.uuid != uuid)
+            .map(|client| Arc::clone(&client.notification))
+            .collect();
+
+        for notification in notifications {
+            notification.notify();
+        }
 
         Ok(Json(CommitResultStatus::Success(id)))
     } else {
@@ -85,8 +117,6 @@ async fn commit(
             .iter()
             .map(|chunk_id| chunk_id.0.to_string())
             .collect();
-
-        notification.notify();
 
         Ok(Json(CommitResultStatus::NeedChunks(
             to_be_uploaded_strings.join(","),
@@ -100,8 +130,16 @@ async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
     debug_!("list after {:?}", jid);
     let records: Vec<FileRecord> = db
         .run(move |conn| {
+            // Consider only latest record for the same path.
+            let subquery = file_records::table
+                .group_by(file_records::path)
+                .select(max(file_records::id))
+                .into_boxed()
+                .select(sql::<diesel::sql_types::Integer>("max(id)"));
+
             file_records::table
                 .filter(file_records::id.gt(jid))
+                .filter(file_records::id.eq_any(subquery))
                 .select(FileRecord::as_select())
                 .load(conn)
         })
@@ -110,9 +148,27 @@ async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
     Ok(Json(records))
 }
 
-#[get("/poll?<seconds>")]
-async fn poll(users: &State<Mutex<ActiveUsers>>, seconds: u64) -> String {
-    let notification = users.lock().unwrap().notification.clone();
+#[get("/poll?<seconds>&<uuid>")]
+async fn poll(clients: &State<Mutex<ActiveClients>>, uuid: String, seconds: u64) -> String {
+    let notification = {
+        let mut data = clients.lock().unwrap();
+
+        let client = Client {
+            uuid: uuid.clone(),
+            notification: Arc::new(Notify::new())
+        };
+
+        match data.clients.get(&client) {
+            Some(c) => {
+                c.notification.clone()
+            },
+            None => {
+                let notification = client.notification.clone();
+                data.clients.insert(client);
+                notification
+            },
+        }
+    };
 
     match tokio::time::timeout(Duration::from_secs(seconds), notification.notified()).await {
         Ok(_) => {
@@ -143,12 +199,12 @@ async fn run_migrations(rocket: Rocket<Build>) -> Rocket<Build> {
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Diesel SQLite Stage", |rocket| async {
-        let users = Mutex::new(ActiveUsers { notification: Arc::new(Notify::new()) });
+        let clients = Mutex::new(ActiveClients { clients: HashSet::new() });
 
         rocket
             .attach(Db::fairing())
             .attach(AdHoc::on_ignite("Diesel Migrations", run_migrations))
             .mount("/metadata", routes![commit, list, poll])
-            .manage(users)
+            .manage(clients)
     })
 }

@@ -34,3 +34,9 @@ time = { version = "0.3.31", features = ["std"] }
 tokio = { version = "1.35.1", features = ["time", "full"] }
 uniffi = "0.26.1"
 walkdir = "2.4.0"
+
+[dependencies.uuid]
+version = "1.7.0"
+features = [
+    "v4",                # Lets you generate random UUIDs
+]

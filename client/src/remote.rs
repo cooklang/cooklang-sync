@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use bytes::Bytes;
+use log::{trace};
 
 type Result<T, E = reqwest::Error> = std::result::Result<T, E>;
 
@@ -22,6 +24,7 @@ pub enum CommitResultStatus {
 pub struct Remote {
     api_endpoint: String,
     token: String,
+    uuid: String,
     client: reqwest::Client,
 }
 
@@ -30,6 +33,7 @@ impl Remote {
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
         Self {
             api_endpoint: api_endpoint.into(),
+            uuid: Uuid::new_v4().into(),
             token: token.into(),
             client: reqwest::Client::new()
         }
@@ -38,6 +42,8 @@ impl Remote {
 impl Remote {
 
     pub async fn upload(&self, chunk: &str, content: Bytes) -> Result<()>{
+        trace!("uploading chunk {:?}", chunk);
+
         self.client
             .post(self.api_endpoint.clone() + "/chunks/" + chunk)
             .body(content)
@@ -48,6 +54,8 @@ impl Remote {
     }
 
     pub async fn download(&self, chunk: &str) -> Result<Bytes>{
+        trace!("downloading chunk {:?}", chunk);
+
         let response = self.client
             .get(self.api_endpoint.clone() + "/chunks/" + chunk)
             .send()
@@ -57,6 +65,8 @@ impl Remote {
     }
 
     pub async fn list(&self, local_jid: i32) -> Result<Vec<ResponseFileRecord>> {
+        trace!("list after {:?}", local_jid);
+
         let jid_string = local_jid.to_string();
 
         let res = self.client
@@ -68,10 +78,12 @@ impl Remote {
     }
 
     pub async fn poll(&self, seconds: i32) -> Result<()> {
+        trace!("started poll");
+
         let seconds_string = seconds.to_string();
 
         let res = self.client
-            .get(self.api_endpoint.clone() + "/metadata/poll?seconds=" + &seconds_string)
+            .get(self.api_endpoint.clone() + "/metadata/poll?seconds=" + &seconds_string + "&uuid=" + &self.uuid)
             .send()
             .await?;
 
@@ -79,6 +91,8 @@ impl Remote {
     }
 
     pub async fn commit(&self, path: &str, deleted: bool, chunk_ids: &str, format: &str) -> Result<CommitResultStatus> {
+        trace!("commit {:?}", path);
+
         let params = [
             ("format", format),
             ("deleted", if deleted { "true" } else { "false" }),
@@ -87,7 +101,7 @@ impl Remote {
         ];
 
         let res = self.client
-            .post(self.api_endpoint.clone() + "/metadata/commit")
+            .post(self.api_endpoint.clone() + "/metadata/commit" + "?uuid=" + &self.uuid)
             .form(&params)
             .send()
             .await?;

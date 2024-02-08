@@ -18,7 +18,7 @@ use crate::errors::SyncError;
 use crate::chunker::Chunker;
 use crate::remote::{Remote, CommitResultStatus};
 
-const INTERVAL_CHECK_DOWNLOAD_SEC: i32 = 23;
+const INTERVAL_CHECK_DOWNLOAD_SEC: i32 = 307;
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 
 pub async fn run(
@@ -29,9 +29,6 @@ pub async fn run(
     mut local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
 ) {
     let chunker = Arc::new(Mutex::new(chunker));
-
-    // wait for indexer to work first
-    tokio::time::sleep(Duration::from_secs(5)).await;
 
     let check_download = async {
         let chunker = Arc::clone(&chunker);
@@ -45,17 +42,22 @@ pub async fn run(
             let to_download = remote.list(latest_local).await.unwrap();
 
             for d in &to_download {
-                trace!("to be downloaded {:?}", d);
+                trace!("to download {:?}", d);
 
                 let mut chunker = chunker.lock().await;
 
                 if d.deleted {
                     let form = build_delete_form(&d.path, storage_path, d.id);
                     // TODO atomic?
-                    chunker.delete(&d.path);
                     registry::delete(conn, &vec![form]);
+                    chunker.delete(&d.path);
                 } else {
                     let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
+
+                    // Warm-up cache to include chunks from an old file
+                    if chunker.exists(&d.path) {
+                        chunker.hashify(&d.path);
+                    }
 
                     for c in &chunks {
                         if !chunker.check_chunk(c).unwrap() {
@@ -64,6 +66,7 @@ pub async fn run(
                     }
 
                     // TODO atomic? store in tmp first and then move?
+                    // TODO should be after we create record in db
                     if let Err(e) = chunker.save(&d.path, chunks) {
                         error!("{:?}", e);
                     }
@@ -78,6 +81,9 @@ pub async fn run(
     };
 
     let check_upload = async {
+        // wait for indexer to work first
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
         let chunker = Arc::clone(&chunker);
 
         loop {
@@ -87,26 +93,24 @@ pub async fn run(
 
             let to_upload = registry::updated_locally(conn).unwrap();
 
-            trace!("to_upload {:?}", to_upload);
-
             for f in &to_upload {
+                trace!("to upload {:?}", f);
+
                 let mut chunker = chunker.lock().await;
                 let mut chunk_ids = vec![String::from("")];
 
                 if !f.deleted {
+                    // Also warms up the cache
                     chunk_ids = chunker.hashify(&f.path).unwrap();
                 }
 
-                trace!("check_upload {:?} {:?}", f, chunk_ids);
                 let r = remote.commit(&f.path, f.deleted, &chunk_ids.join(","), "t").await.unwrap();
 
                 match r {
                     CommitResultStatus::Success(jid) => {
-                        trace!("commited {:?}", jid);
                         registry::update_jid(conn, f, jid);
                     },
                     CommitResultStatus::NeedChunks(chunks) => {
-                        trace!("need chunks {:?}", chunks);
                         for c in chunks.split(',') {
                             // TODO bundle multiple into one request
                             remote.upload(c, chunker.read_chunk(c).unwrap()).await;

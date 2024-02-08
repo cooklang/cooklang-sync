@@ -60,6 +60,12 @@ impl Chunker {
         hex_string[0..10].to_string()
     }
 
+    pub fn exists(&mut self, path: &str) -> bool {
+        let full_path = self.full_path(path);
+
+        full_path.exists()
+    }
+
     pub fn save(&mut self, path: &str, hashes: Vec<&str>) -> io::Result<()> {
         trace!("saving {:?}", path);
         let full_path = self.full_path(path);

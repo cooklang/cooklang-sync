@@ -19,7 +19,6 @@ pub fn create(conn: &mut Connection, forms: &Vec<CreateForm>) -> Result<usize> {
 pub fn update_jid(conn: &mut Connection, record: &FileRecord, jid: i32) -> Result<usize> {
     trace!("update_jid {:?}: {:?}", jid, record);
 
-    // TODO Should it be insert?
     update(file_records::table)
         .filter(file_records::id.eq(record.id))
         .set(file_records::jid.eq(jid))

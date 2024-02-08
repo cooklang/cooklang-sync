@@ -37,6 +37,7 @@ pub struct CreateForm {
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct DeleteForm {
     pub path: String,
+    pub jid: Option<i32>,
     pub format: String,
     pub size: i64,
     pub modified_at: OffsetDateTime,

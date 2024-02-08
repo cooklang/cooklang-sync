@@ -154,12 +154,13 @@ fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::Create
     Ok(form)
 }
 
-fn build_delete_form(path: &str, base: &Path, _jid: i32) -> models::DeleteForm {
+fn build_delete_form(path: &str, base: &Path, jid: i32) -> models::DeleteForm {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
 
     models::DeleteForm {
         path: path.to_string(),
+        jid: Some(jid),
         deleted: true,
         size: 0,
         format: "t".to_string(),

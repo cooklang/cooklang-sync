@@ -127,6 +127,8 @@ TODO
 - namespace mounting
 - make it work whenb offline
 - garbage collection
+
+
 - make sure non-blocking behavour
 - add documentation
 - extract to core shared datasctuctures

@@ -63,7 +63,6 @@ pub async fn run(
 
         tokio::select! {
             _ = tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC) => {},
-            // TODO make sure it doesn't stop watching
             Some(_) = local_file_update_rx.next() => {},
         };
     }
@@ -129,7 +128,6 @@ fn compare_records(
             // remove and add file again.
             Some(disk_file) => {
                 if db_file != disk_file {
-                    // to_remove.push(build_delete_form(db_file));
                     to_add.push(disk_file.clone());
                 }
             }
@@ -174,6 +172,7 @@ fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm,SyncError> {
 fn build_delete_form(record: &FileRecord) -> DeleteForm {
     DeleteForm {
         path: record.path.to_string(),
+        jid: None,
         deleted: true,
         size: record.size,
         format: record.format.to_string(),

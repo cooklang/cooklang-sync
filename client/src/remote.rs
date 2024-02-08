@@ -69,12 +69,12 @@ impl Remote {
 
         let jid_string = local_jid.to_string();
 
-        let res = self.client
+        let response = self.client
             .get(self.api_endpoint.clone() + "/metadata/list?jid=" + &jid_string)
             .send()
             .await?;
 
-        res.json().await
+        response.json().await
     }
 
     pub async fn poll(&self, seconds: i32) -> Result<()> {
@@ -82,12 +82,12 @@ impl Remote {
 
         let seconds_string = seconds.to_string();
 
-        let res = self.client
+        let response = self.client
             .get(self.api_endpoint.clone() + "/metadata/poll?seconds=" + &seconds_string + "&uuid=" + &self.uuid)
             .send()
             .await?;
 
-        res.json().await
+        response.json().await
     }
 
     pub async fn commit(&self, path: &str, deleted: bool, chunk_ids: &str, format: &str) -> Result<CommitResultStatus> {
@@ -100,12 +100,12 @@ impl Remote {
             ("path", path),
         ];
 
-        let res = self.client
+        let response = self.client
             .post(self.api_endpoint.clone() + "/metadata/commit" + "?uuid=" + &self.uuid)
             .form(&params)
             .send()
             .await?;
 
-        res.json().await
+        response.json().await
     }
 }

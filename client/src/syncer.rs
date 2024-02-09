@@ -93,10 +93,14 @@ pub async fn run(
 
             let to_upload = registry::updated_locally(conn).unwrap();
 
+            let mut chunker = chunker.lock().await;
+            let mut upload_payload: Vec<Vec<(String, Vec<u8>)>> = vec![vec![]];
+            let mut size = 0;
+            let mut last = upload_payload.last_mut().unwrap();
+
             for f in &to_upload {
                 trace!("to upload {:?}", f);
 
-                let mut chunker = chunker.lock().await;
                 let mut chunk_ids = vec![String::from("")];
 
                 if !f.deleted {
@@ -111,13 +115,23 @@ pub async fn run(
                         registry::update_jid(conn, f, jid);
                     },
                     CommitResultStatus::NeedChunks(chunks) => {
-                        let payload = chunks.split(',').map(|c| {
-                            (c, chunker.read_chunk(c).unwrap())
-                        }).collect();
+                        for c in chunks.split(',') {
+                            let data = chunker.read_chunk(c).unwrap();
+                            size += data.len();
+                            last.push((c.into(), data));
 
-                        remote.upload_batch(payload).await;
+                            if size > 1_000_000 {
+                                upload_payload.push(vec![]);
+                                last = upload_payload.last_mut().unwrap();
+                                size = 0;
+                            }
+                        }
                     },
                 }
+            }
+
+            for batch in upload_payload {
+                remote.upload_batch(batch).await;
             }
 
             // need to wait only if we didn't upload anything

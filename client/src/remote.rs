@@ -54,13 +54,13 @@ impl Remote {
         Ok(())
     }
 
-    pub async fn upload_batch(&self, chunks: Vec<(&str, Vec<u8>)>) -> Result<()> {
+    pub async fn upload_batch(&self, chunks: Vec<(String, Vec<u8>)>) -> Result<()> {
         trace!("uploading chunks {:?}", chunks);
 
         let mut form = multipart::Form::new();
 
         for (chunk, content) in chunks {
-            form = form.part(String::from(chunk), multipart::Part::bytes(content));
+            form = form.part(chunk, multipart::Part::bytes(content));
         }
 
         self.client

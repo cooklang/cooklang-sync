@@ -66,6 +66,7 @@ impl Chunker {
         full_path.exists()
     }
 
+    // TODO can be a problem as it expects cache to contain all chunks
     pub fn save(&mut self, path: &str, hashes: Vec<&str>) -> io::Result<()> {
         trace!("saving {:?}", path);
         let full_path = self.full_path(path);

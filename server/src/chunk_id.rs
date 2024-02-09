@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use rocket::request::FromParam;
 
+
 /// A _probably_ unique chunk ID.
 #[derive(UriDisplayPath)]
 pub struct ChunkId<'a>(pub(crate) Cow<'a, str>);
@@ -33,3 +34,13 @@ impl<'a> FromParam<'a> for ChunkId<'a> {
             .ok_or(param)
     }
 }
+
+impl<'a> From<&'a str> for ChunkId<'a> {
+    fn from(file_name: &'a str) -> Self {
+        // Convert FileName to a string slice (&str)
+
+        // Convert &str to Cow<str>
+        ChunkId(Cow::from(file_name))
+    }
+}
+

@@ -1,26 +1,53 @@
 use std::io;
-
-use rocket::data::{Data, ToByteUnit};
-use rocket::fairing::AdHoc;
-use rocket::http::uri::Absolute;
-use rocket::response::content::RawText;
-use rocket::tokio::fs::File;
+use std::io::Cursor;
 
 use crate::chunk_id::ChunkId;
+use multer::Multipart;
+use rocket::data::{ByteUnit};
+use rocket::data::{Data};
+use rocket::fairing::AdHoc;
 
-// In a real application, these would be retrieved dynamically from a config.
-const HOST: Absolute<'static> = uri!("http://localhost:8000");
+use rocket::response::content::RawText;
+use rocket::tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 
-/// Uploads chunk to a storage
-#[post("/<id>", data = "<chunk>")]
-async fn upload(id: ChunkId<'_>, chunk: Data<'_>) -> io::Result<String> {
-    chunk
-        .open(128.kibibytes())
-        .into_file(id.file_path())
-        .await?;
-    Ok(uri!(HOST, retrieve(id)).to_string())
+
+
+const TEXT_LIMIT: ByteUnit = ByteUnit::Kibibyte(64);
+
+use rocket::request::{FromRequest, Outcome};
+
+pub struct RawContentType<'r>(pub &'r str);
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for RawContentType<'r> {
+    type Error = ();
+
+    async fn from_request(req: &'r rocket::Request<'_>) -> Outcome<Self, Self::Error> {
+        let header = req.headers().get_one("Content-Type").or(Some("")).unwrap();
+        Outcome::Success(RawContentType(header))
+    }
 }
 
+#[post("/", format = "multipart/form-data", data = "<upload>")]
+async fn upload_chunks(content_type: RawContentType<'_>, upload: Data<'_>   ) -> io::Result<()> {
+    let boundary = multer::parse_boundary(content_type.0).unwrap();
+    let upload_stream = upload.open(TEXT_LIMIT);
+    let mut multipart = Multipart::new(tokio_util::io::ReaderStream::new(upload_stream), boundary);
+
+    // TODO prevent from DDOS
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let field_name = field.name().unwrap();
+
+        let chunk_id = ChunkId::from(field_name);
+        let mut file = tokio::fs::File::create(chunk_id.file_path()).await.unwrap();
+        let bytes = field.bytes().await.unwrap();
+        let mut cursor = Cursor::new(bytes);
+        file.write_all_buf(&mut cursor).await.unwrap();
+    }
+
+    Ok(())
+}
 
 /// Downloads chunk from a storage
 #[get("/<id>")]
@@ -30,6 +57,6 @@ async fn retrieve(id: ChunkId<'_>) -> Option<RawText<File>> {
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Chunk Server Stage", |rocket| async {
-        rocket.mount("/chunks", routes![upload, retrieve])
+        rocket.mount("/chunks", routes![upload_chunks, retrieve])
     })
 }

@@ -111,10 +111,11 @@ pub async fn run(
                         registry::update_jid(conn, f, jid);
                     },
                     CommitResultStatus::NeedChunks(chunks) => {
-                        for c in chunks.split(',') {
-                            // TODO bundle multiple into one request
-                            remote.upload(c, chunker.read_chunk(c).unwrap()).await;
-                        }
+                        let payload = chunks.split(',').map(|c| {
+                            (c, chunker.read_chunk(c).unwrap())
+                        }).collect();
+
+                        remote.upload_batch(payload).await;
                     },
                 }
             }

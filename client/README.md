@@ -127,6 +127,8 @@ TODO
 - namespace mounting
 - make it work whenb offline
 - garbage collection
+- use tokio::fs::File::create
+- cleanup deps
 
 
 - make sure non-blocking behavour
@@ -137,4 +139,5 @@ TODO
 - test test test
 - metrics for monitoring (cache saturation, miss)
 - draw data-flow
+- protect from ddos https://github.com/rousan/multer-rs/blob/master/examples/prevent_dos_attack.rs
 - auto-update

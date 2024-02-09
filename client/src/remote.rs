@@ -4,6 +4,8 @@ use uuid::Uuid;
 use bytes::Bytes;
 use log::{trace};
 
+use reqwest::{multipart};
+
 type Result<T, E = reqwest::Error> = std::result::Result<T, E>;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -47,6 +49,24 @@ impl Remote {
         self.client
             .post(self.api_endpoint.clone() + "/chunks/" + chunk)
             .body(content)
+            .send()
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn upload_batch(&self, chunks: Vec<(&str, Bytes)>) -> Result<()> {
+        trace!("uploading chunks {:?}", chunks);
+
+        let mut form = multipart::Form::new();
+
+        for (chunk, content) in chunks {
+            form = form.part(String::from(chunk), multipart::Part::bytes(content.to_vec()));
+        }
+
+        self.client
+            .post(self.api_endpoint.clone() + "/chunks/")
+            .multipart(form)
             .send()
             .await?;
 

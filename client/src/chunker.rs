@@ -4,7 +4,6 @@ use std::io::{self, prelude::*, BufReader, BufWriter};
 use std::path::{PathBuf};
 use std::fs;
 
-use bytes::Bytes;
 use sha2::{Sha256, Digest};
 
 use log::{trace};
@@ -32,12 +31,11 @@ impl Chunker {
         let file = File::open(self.full_path(path))?;
         let mut reader = BufReader::new(file);
         let mut buffer = Vec::new();
-
         let mut hashes = Vec::new();
 
         // TODO should work for
         while reader.read_until(b'\n', &mut buffer)? > 0 {
-            let data: Bytes = buffer.clone().into();
+            let data: Vec<u8> = buffer.clone();
             let hash = self.hash(&data);
             self.save_chunk(&hash, data);
             hashes.push(hash);
@@ -49,7 +47,7 @@ impl Chunker {
         Ok(hashes)
     }
 
-    pub fn hash(&self, data: &Bytes) -> String {
+    pub fn hash(&self, data: &Vec<u8>) -> String {
         let mut hasher = Sha256::new();
 
         hasher.update(data);
@@ -99,11 +97,11 @@ impl Chunker {
         Ok(())
     }
 
-    pub fn read_chunk(&self, chunk_hash: &str) -> io::Result<Bytes> {
+    pub fn read_chunk(&self, chunk_hash: &str) -> io::Result<Vec<u8>> {
         self.cache.get(chunk_hash)
     }
 
-    pub fn save_chunk(&mut self, chunk_hash: &str, content: Bytes) -> io::Result<()> {
+    pub fn save_chunk(&mut self, chunk_hash: &str, content: Vec<u8>) -> io::Result<()> {
         self.cache.set(chunk_hash, content)
     }
 
@@ -117,8 +115,8 @@ impl Chunker {
 #[derive(Clone)]
 pub struct BytesWeighter;
 
-impl Weighter<String, Bytes> for BytesWeighter {
-    fn weight(&self, _key: &String, val: &Bytes) -> u32 {
+impl Weighter<String, Vec<u8>> for BytesWeighter {
+    fn weight(&self, _key: &String, val: &Vec<u8>) -> u32 {
         // Be cautions out about zero weights!
         val.len().clamp(1, u32::MAX as usize) as u32
     }
@@ -126,7 +124,7 @@ impl Weighter<String, Bytes> for BytesWeighter {
 
 
 pub struct InMemoryCache {
-    cache: Cache<String, Bytes, BytesWeighter>
+    cache: Cache<String, Vec<u8>, BytesWeighter>
 }
 
 impl InMemoryCache {
@@ -136,7 +134,7 @@ impl InMemoryCache {
         }
     }
 
-    fn get(&self, chunk_hash: &str) -> io::Result<Bytes> {
+    fn get(&self, chunk_hash: &str) -> io::Result<Vec<u8>> {
         match self.cache.get(chunk_hash) {
             Some(content) => Ok(content.clone()),
             None => Err(io::Error::new(
@@ -146,7 +144,7 @@ impl InMemoryCache {
         }
     }
 
-    fn set(&mut self, chunk_hash: &str, content: Bytes) -> io::Result<()> {
+    fn set(&mut self, chunk_hash: &str, content: Vec<u8>) -> io::Result<()> {
         self.cache.insert(chunk_hash.to_string(), content);
         Ok(())
     }

@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use bytes::Bytes;
 use log::{trace};
 
 use reqwest::{multipart};
@@ -43,7 +42,7 @@ impl Remote {
 }
 impl Remote {
 
-    pub async fn upload(&self, chunk: &str, content: Bytes) -> Result<()>{
+    pub async fn upload(&self, chunk: &str, content: Vec<u8>) -> Result<()>{
         trace!("uploading chunk {:?}", chunk);
 
         self.client
@@ -55,13 +54,13 @@ impl Remote {
         Ok(())
     }
 
-    pub async fn upload_batch(&self, chunks: Vec<(&str, Bytes)>) -> Result<()> {
+    pub async fn upload_batch(&self, chunks: Vec<(&str, Vec<u8>)>) -> Result<()> {
         trace!("uploading chunks {:?}", chunks);
 
         let mut form = multipart::Form::new();
 
         for (chunk, content) in chunks {
-            form = form.part(String::from(chunk), multipart::Part::bytes(content.to_vec()));
+            form = form.part(String::from(chunk), multipart::Part::bytes(content));
         }
 
         self.client
@@ -73,7 +72,7 @@ impl Remote {
         Ok(())
     }
 
-    pub async fn download(&self, chunk: &str) -> Result<Bytes>{
+    pub async fn download(&self, chunk: &str) -> Result<Vec<u8>>{
         trace!("downloading chunk {:?}", chunk);
 
         let response = self.client
@@ -81,7 +80,10 @@ impl Remote {
             .send()
             .await?;
 
-        response.bytes().await
+        match response.bytes().await {
+            Ok(bytes) => Ok(bytes.to_vec()),
+            Err(e) => Err(e)
+        }
     }
 
     pub async fn list(&self, local_jid: i32) -> Result<Vec<ResponseFileRecord>> {

@@ -9,7 +9,7 @@ use tokio::time::Duration;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use log::{debug, trace, error};
+use log::{debug, trace, error, info};
 
 use crate::registry;
 use crate::connection::{ConnectionPool, get_connection};
@@ -20,6 +20,7 @@ use crate::remote::{Remote, CommitResultStatus};
 
 const INTERVAL_CHECK_DOWNLOAD_SEC: i32 = 307;
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
+const NO_INTERNET_SLEEP_SEC: Duration = Duration::from_secs(61);
 
 pub async fn run(
     pool: &ConnectionPool,
@@ -39,7 +40,16 @@ pub async fn run(
             let conn = &mut get_connection(pool).unwrap();
 
             let latest_local = registry::latest_jid(conn).unwrap_or(0);
-            let to_download = remote.list(latest_local).await.unwrap();
+            let to_download = match remote.list(latest_local).await {
+                Ok(v) => v,
+                Err(e) => {
+                    info!("couldn't reach remote server");
+
+                    tokio::time::sleep(NO_INTERNET_SLEEP_SEC).await;
+
+                    continue;
+                },
+            };
 
             for d in &to_download {
                 trace!("to download {:?}", d);

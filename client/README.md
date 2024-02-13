@@ -118,18 +118,17 @@ Q:
 TODO
 ====
 - bundling of uploads/downloads
-- can be issue that chunk is not in cache when we try to write file
-- namespaces
+- read-only
 - auth
+- namespaces
 - proper error handling
 - report error on unexpeted cache behaviour
-- read-only
-- namespace mounting
-- make it work whenb offline
+- make it work when offline
 - garbage collection
+- store files on server smarter
 - use tokio::fs::File::create
-- cleanup deps
-
+- fix Warning: Shutdown failed: outstanding background I/O. Error: Rocket failed to shutdown gracefully.
+- how to keep it available for opensource
 
 - make sure non-blocking behavour
 - add documentation

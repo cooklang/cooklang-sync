@@ -3,6 +3,7 @@ use rocket::form::{Form, FromForm};
 use rocket::response::Debug;
 use rocket::serde::{json::Json, Deserialize, Serialize};
 use rocket::{Build, Rocket, State};
+use rocket::Shutdown;
 
 use rocket_sync_db_pools::database;
 use diesel::prelude::*;
@@ -149,7 +150,7 @@ async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
 }
 
 #[get("/poll?<seconds>&<uuid>")]
-async fn poll(clients: &State<Mutex<ActiveClients>>, uuid: String, seconds: u64) -> String {
+async fn poll(clients: &State<Mutex<ActiveClients>>, uuid: String, seconds: u64, shutdown: Shutdown) -> String {
     let notification = {
         let mut data = clients.lock().unwrap();
 
@@ -170,12 +171,20 @@ async fn poll(clients: &State<Mutex<ActiveClients>>, uuid: String, seconds: u64)
         }
     };
 
-    match tokio::time::timeout(Duration::from_secs(seconds), notification.notified()).await {
-        Ok(_) => {
-            "Done".to_string()
-        },
-        Err(_) => {
-            "Timeout".to_string()
+    // Create a timeout future
+    let timeout = tokio::time::timeout(Duration::from_secs(seconds), notification.notified());
+
+    // Select between the timeout future and the shutdown signal
+    tokio::select! {
+        _ = shutdown => {
+            // Server is shutting down
+            "Server shutting down".to_string()
+        }
+        result = timeout => {
+            match result {
+                Ok(_) => "Done".to_string(),
+                Err(_) => "Timeout".to_string(),
+            }
         }
     }
 }

@@ -11,8 +11,19 @@ pub struct ChunkId<'a>(pub(crate) Cow<'a, str>);
 impl ChunkId<'_> {
     /// Returns the path to the chunk in `upload/` corresponding to this ID.
     pub fn file_path(&self) -> PathBuf {
+        // TODO make parameter
         let root = concat!(env!("CARGO_MANIFEST_DIR"), "/", "upload");
-        Path::new(root).join(self.0.as_ref())
+        let id_str = self.0.as_ref();
+
+        // Ensure the ID is long enough
+        if id_str.len() < 2 {
+            panic!("Chunk ID is too short, must be at least 2 characters long");
+        }
+
+        let first_char = &id_str[0..1];
+        let second_char = &id_str[1..2];
+
+        Path::new(root).join(first_char).join(second_char).join(id_str)
     }
 
     /// Returns the path to the chunk in `upload/` corresponding to this ID.

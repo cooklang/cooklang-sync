@@ -8,7 +8,7 @@ use rocket::data::{Data};
 use rocket::fairing::AdHoc;
 
 use rocket::response::content::RawText;
-use rocket::tokio::fs::File;
+use rocket::tokio::fs::{File, create_dir_all};
 use tokio::io::AsyncWriteExt;
 
 
@@ -40,7 +40,11 @@ async fn upload_chunks(content_type: RawContentType<'_>, upload: Data<'_>   ) ->
         let field_name = field.name().unwrap();
 
         let chunk_id = ChunkId::from(field_name);
-        let mut file = tokio::fs::File::create(chunk_id.file_path()).await.unwrap();
+        let full_path = chunk_id.file_path();
+        if let Some(parent) = full_path.parent() {
+            create_dir_all(parent).await?;
+        }
+        let mut file = tokio::fs::File::create(full_path).await.unwrap();
         let bytes = field.bytes().await.unwrap();
         let mut cursor = Cursor::new(bytes);
         file.write_all_buf(&mut cursor).await.unwrap();

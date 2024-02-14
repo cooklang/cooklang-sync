@@ -118,14 +118,12 @@ Q:
 TODO
 ====
 - bundling of uploads/downloads
-- read-only
 - auth
+- read-only
 - namespaces
 - proper error handling
 - report error on unexpeted cache behaviour
-- make it work when offline
 - garbage collection
-- store files on server smarter
 - use tokio::fs::File::create
 - fix Warning: Shutdown failed: outstanding background I/O. Error: Rocket failed to shutdown gracefully.
 - how to keep it available for opensource

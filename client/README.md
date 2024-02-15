@@ -125,8 +125,7 @@ TODO
 - report error on unexpeted cache behaviour
 - garbage collection
 - use tokio::fs::File::create
-- fix Warning: Shutdown failed: outstanding background I/O. Error: Rocket failed to shutdown gracefully.
-- how to keep it available for opensource
+- how to keep it available for opensource (one user?)
 
 - make sure non-blocking behavour
 - add documentation

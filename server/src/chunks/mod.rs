@@ -1,17 +1,14 @@
-use std::io;
 use std::io::Cursor;
 
-use crate::chunk_id::ChunkId;
 use multer::Multipart;
-use rocket::data::{ByteUnit};
-use rocket::data::{Data};
+use rocket::data::{ByteUnit, Data};
 use rocket::fairing::AdHoc;
-
 use rocket::response::content::RawText;
-use rocket::tokio::fs::{File, create_dir_all};
-use tokio::io::AsyncWriteExt;
+use rocket::tokio::fs::{create_dir_all, File};
+use rocket::tokio::io::AsyncWriteExt;
+use tokio_util::io::ReaderStream;
 
-
+use crate::chunk_id::ChunkId;
 
 const TEXT_LIMIT: ByteUnit = ByteUnit::Kibibyte(64);
 
@@ -24,16 +21,16 @@ impl<'r> FromRequest<'r> for RawContentType<'r> {
     type Error = ();
 
     async fn from_request(req: &'r rocket::Request<'_>) -> Outcome<Self, Self::Error> {
-        let header = req.headers().get_one("Content-Type").or(Some("")).unwrap();
+        let header = req.headers().get_one("Content-Type").unwrap_or("");
         Outcome::Success(RawContentType(header))
     }
 }
 
 #[post("/", format = "multipart/form-data", data = "<upload>")]
-async fn upload_chunks(content_type: RawContentType<'_>, upload: Data<'_>   ) -> io::Result<()> {
+async fn upload_chunks(content_type: RawContentType<'_>, upload: Data<'_>) -> std::io::Result<()> {
     let boundary = multer::parse_boundary(content_type.0).unwrap();
     let upload_stream = upload.open(TEXT_LIMIT);
-    let mut multipart = Multipart::new(tokio_util::io::ReaderStream::new(upload_stream), boundary);
+    let mut multipart = Multipart::new(ReaderStream::new(upload_stream), boundary);
 
     // TODO prevent from DDOS
     while let Ok(Some(field)) = multipart.next_field().await {
@@ -54,6 +51,7 @@ async fn upload_chunks(content_type: RawContentType<'_>, upload: Data<'_>   ) ->
 }
 
 /// Downloads chunk from a storage
+// TODO batch download
 #[get("/<id>")]
 async fn retrieve(id: ChunkId<'_>) -> Option<RawText<File>> {
     File::open(id.file_path()).await.map(RawText).ok()

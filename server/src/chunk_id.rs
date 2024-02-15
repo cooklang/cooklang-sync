@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use rocket::request::FromParam;
 
-
 /// A _probably_ unique chunk ID.
 #[derive(UriDisplayPath)]
 pub struct ChunkId<'a>(pub(crate) Cow<'a, str>);
@@ -23,7 +22,10 @@ impl ChunkId<'_> {
         let first_char = &id_str[0..1];
         let second_char = &id_str[1..2];
 
-        Path::new(root).join(first_char).join(second_char).join(id_str)
+        Path::new(root)
+            .join(first_char)
+            .join(second_char)
+            .join(id_str)
     }
 
     /// Returns the path to the chunk in `upload/` corresponding to this ID.
@@ -54,4 +56,3 @@ impl<'a> From<&'a str> for ChunkId<'a> {
         ChunkId(Cow::from(file_name))
     }
 }
-

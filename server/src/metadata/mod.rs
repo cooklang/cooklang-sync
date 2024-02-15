@@ -2,18 +2,17 @@ use rocket::fairing::AdHoc;
 use rocket::form::{Form, FromForm};
 use rocket::response::Debug;
 use rocket::serde::{json::Json, Deserialize, Serialize};
-use rocket::{Build, Rocket, State};
-use rocket::Shutdown;
-
+use rocket::{Build, Rocket, Shutdown, State};
 use rocket_sync_db_pools::database;
+
+use diesel::dsl::{max, sql};
 use diesel::prelude::*;
-use diesel::dsl::{max,sql};
 
 use async_notify::Notify;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration};
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::chunk_id::ChunkId;
 use crate::models::*;
@@ -24,8 +23,7 @@ struct Db(diesel::SqliteConnection);
 
 type Result<T, E = Debug<diesel::result::Error>> = std::result::Result<T, E>;
 
-#[derive(Debug)]
-#[derive(FromForm)]
+#[derive(Debug, FromForm)]
 struct CommitPayload<'r> {
     path: &'r str,
     deleted: bool,
@@ -39,7 +37,6 @@ enum CommitResultStatus {
     Success(i32),
     NeedChunks(String),
 }
-
 
 struct Client {
     uuid: String,
@@ -61,7 +58,7 @@ impl Hash for Client {
 }
 
 struct ActiveClients {
-    clients: HashSet<Client>
+    clients: HashSet<Client>,
 }
 
 // check if all hashes are present
@@ -128,7 +125,6 @@ async fn commit(
 // return back array of jid, path, hashes for all jid since requested
 #[get("/list?<jid>")]
 async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
-    debug_!("list after {:?}", jid);
     let records: Vec<FileRecord> = db
         .run(move |conn| {
             // Consider only latest record for the same path.
@@ -150,34 +146,34 @@ async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
 }
 
 #[get("/poll?<seconds>&<uuid>")]
-async fn poll(clients: &State<Mutex<ActiveClients>>, uuid: String, seconds: u64, shutdown: Shutdown) -> String {
+async fn poll(
+    clients: &State<Mutex<ActiveClients>>,
+    uuid: String,
+    seconds: u64,
+    shutdown: Shutdown,
+) -> String {
     let notification = {
         let mut data = clients.lock().unwrap();
 
         let client = Client {
             uuid: uuid.clone(),
-            notification: Arc::new(Notify::new())
+            notification: Arc::new(Notify::new()),
         };
 
         match data.clients.get(&client) {
-            Some(c) => {
-                c.notification.clone()
-            },
+            Some(c) => c.notification.clone(),
             None => {
                 let notification = client.notification.clone();
                 data.clients.insert(client);
                 notification
-            },
+            }
         }
     };
 
-    // Create a timeout future
     let timeout = tokio::time::timeout(Duration::from_secs(seconds), notification.notified());
 
-    // Select between the timeout future and the shutdown signal
     tokio::select! {
         _ = shutdown => {
-            // Server is shutting down
             "Server shutting down".to_string()
         }
         result = timeout => {
@@ -208,7 +204,9 @@ async fn run_migrations(rocket: Rocket<Build>) -> Rocket<Build> {
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Diesel SQLite Stage", |rocket| async {
-        let clients = Mutex::new(ActiveClients { clients: HashSet::new() });
+        let clients = Mutex::new(ActiveClients {
+            clients: HashSet::new(),
+        });
 
         rocket
             .attach(Db::fairing())

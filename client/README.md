@@ -117,7 +117,6 @@ Q:
 
 TODO
 ====
-- bundling of uploads/downloads
 - auth
 - read-only
 - namespaces
@@ -127,6 +126,7 @@ TODO
 - use tokio::fs::File::create
 - how to keep it available for opensource (one user?)
 
+- bundling of uploads/downloads
 - make sure non-blocking behavour
 - add documentation
 - extract to core shared datasctuctures

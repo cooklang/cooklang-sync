@@ -17,6 +17,7 @@ use std::time::Duration;
 use crate::chunk_id::ChunkId;
 use crate::models::*;
 use crate::schema::*;
+use crate::auth::User;
 
 #[database("diesel")]
 struct Db(diesel::SqliteConnection);
@@ -68,6 +69,7 @@ struct ActiveClients {
 async fn commit(
     clients: &State<Mutex<ActiveClients>>,
     db: Db,
+    _user: User,
     uuid: String,
     commit_payload: Form<CommitPayload<'_>>,
 ) -> Result<Json<CommitResultStatus>> {
@@ -124,7 +126,7 @@ async fn commit(
 
 // return back array of jid, path, hashes for all jid since requested
 #[get("/list?<jid>")]
-async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
+async fn list(db: Db, _user: User, jid: i32) -> Result<Json<Vec<FileRecord>>> {
     let records: Vec<FileRecord> = db
         .run(move |conn| {
             // Consider only latest record for the same path.
@@ -149,6 +151,7 @@ async fn list(db: Db, jid: i32) -> Result<Json<Vec<FileRecord>>> {
 async fn poll(
     clients: &State<Mutex<ActiveClients>>,
     uuid: String,
+    _user: User,
     seconds: u64,
     shutdown: Shutdown,
 ) -> String {

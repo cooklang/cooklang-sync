@@ -1,6 +1,6 @@
 
 use std::fs::{File, create_dir_all};
-use std::io::{self, prelude::*, BufReader, BufWriter};
+use std::io::{prelude::*, BufReader, BufWriter};
 use std::path::{PathBuf};
 use std::fs;
 
@@ -10,10 +10,14 @@ use log::{trace};
 
 use quick_cache::{Weighter, sync::Cache};
 
+use crate::errors::SyncError;
+
 pub struct Chunker {
     cache: InMemoryCache,
     base_path: PathBuf,
 }
+
+type Result<T, E = SyncError> = std::result::Result<T, E>;
 
 
 impl Chunker {
@@ -27,7 +31,7 @@ impl Chunker {
         base
     }
 
-    pub fn hashify(&mut self, path: &str) -> io::Result<Vec<String>> {
+    pub fn hashify(&mut self, path: &str) -> Result<Vec<String>> {
         let file = File::open(self.full_path(path))?;
         let mut reader = BufReader::new(file);
         let mut buffer = Vec::new();
@@ -37,7 +41,7 @@ impl Chunker {
         while reader.read_until(b'\n', &mut buffer)? > 0 {
             let data: Vec<u8> = buffer.clone();
             let hash = self.hash(&data);
-            self.save_chunk(&hash, data);
+            self.save_chunk(&hash, data)?;
             hashes.push(hash);
 
             // Clear the buffer for the next line
@@ -65,7 +69,7 @@ impl Chunker {
     }
 
     // TODO can be a problem as it expects cache to contain all chunks
-    pub fn save(&mut self, path: &str, hashes: Vec<&str>) -> io::Result<()> {
+    pub fn save(&mut self, path: &str, hashes: Vec<&str>) -> Result<()> {
         trace!("saving {:?}", path);
         let full_path = self.full_path(path);
         if let Some(parent) = full_path.parent() {
@@ -87,7 +91,7 @@ impl Chunker {
         Ok(())
     }
 
-    pub fn delete(&mut self, path: &str) -> io::Result<()> {
+    pub fn delete(&mut self, path: &str) -> Result<()> {
         trace!("deleting {:?}", path);
         let full_path = self.full_path(path);
 
@@ -97,16 +101,16 @@ impl Chunker {
         Ok(())
     }
 
-    pub fn read_chunk(&self, chunk_hash: &str) -> io::Result<Vec<u8>> {
+    pub fn read_chunk(&self, chunk_hash: &str) -> Result<Vec<u8>> {
         self.cache.get(chunk_hash)
     }
 
-    pub fn save_chunk(&mut self, chunk_hash: &str, content: Vec<u8>) -> io::Result<()> {
+    pub fn save_chunk(&mut self, chunk_hash: &str, content: Vec<u8>) -> Result<()> {
         self.cache.set(chunk_hash, content)
     }
 
 
-    pub fn check_chunk(&self, chunk_hash: &str) -> io::Result<bool> {
+    pub fn check_chunk(&self, chunk_hash: &str) -> Result<bool> {
         Ok(self.cache.contains(chunk_hash))
     }
 }
@@ -134,17 +138,14 @@ impl InMemoryCache {
         }
     }
 
-    fn get(&self, chunk_hash: &str) -> io::Result<Vec<u8>> {
+    fn get(&self, chunk_hash: &str) -> Result<Vec<u8>> {
         match self.cache.get(chunk_hash) {
             Some(content) => Ok(content.clone()),
-            None => Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Chunk not found in cache",
-            )),
+            None => Err(SyncError::GetFromCacheError),
         }
     }
 
-    fn set(&mut self, chunk_hash: &str, content: Vec<u8>) -> io::Result<()> {
+    fn set(&mut self, chunk_hash: &str, content: Vec<u8>) -> Result<()> {
         self.cache.insert(chunk_hash.to_string(), content);
         Ok(())
     }

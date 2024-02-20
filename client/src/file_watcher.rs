@@ -14,7 +14,7 @@ pub fn async_watcher() -> notify::Result<(Debouncer<FsEventWatcher>, Receiver<De
 
     let debouncer = new_debouncer(Duration::from_secs(DEBOUNCE_SEC), move |res: DebounceEventResult| {
         futures::executor::block_on(async {
-            tx.send(res).await;
+            let _ = tx.send(res).await;
         })
     })?;
 

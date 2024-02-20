@@ -117,7 +117,6 @@ Q:
 
 TODO
 ====
-- auth
 - read-only
 - namespaces
 - proper error handling
@@ -125,13 +124,13 @@ TODO
 - garbage collection
 - use tokio::fs::File::create
 - how to keep it available for opensource (one user?)
+- support of binary files
+    - by extension select text files, the rest is binary
 
 - bundling of uploads/downloads
 - make sure non-blocking behavour
 - add documentation
 - extract to core shared datasctuctures
-- support of binary files
-    - by extension select text files, the rest is binary
 - test test test
 - metrics for monitoring (cache saturation, miss)
 - draw data-flow

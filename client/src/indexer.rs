@@ -58,7 +58,7 @@ pub async fn run(
                 registry::create(conn, &to_add)?;
             }
 
-            updated_tx.send(IndexerUpdateEvent::Updated).await;
+            updated_tx.send(IndexerUpdateEvent::Updated).await?;
         }
 
         tokio::select! {

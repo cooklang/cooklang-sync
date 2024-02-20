@@ -18,12 +18,16 @@ pub enum SyncError {
     DBQueryError(#[from] diesel::result::Error),
     #[error("Reqwest error")]
     ReqwestError(#[from] reqwest::Error),
+    #[error("Error sending value to a channel")]
+    ChannelSendError(#[from] futures::channel::mpsc::SendError),
     #[error("Connection init error")]
     ConnectionInitError(String),
     #[error("Unauthorized token")]
     Unauthorized,
     #[error("Can't parse the response")]
     BodyExtractError,
+    #[error("Can't find in cache")]
+    GetFromCacheError,
     #[error("Unknown error")]
     Unknown,
 }

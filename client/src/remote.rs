@@ -119,7 +119,7 @@ impl Remote {
             StatusCode::OK => {
                 match response.bytes().await {
                     Ok(bytes) => Ok(bytes.to_vec()),
-                    Err(e) => Err(SyncError::BodyExtractError)
+                    Err(_) => Err(SyncError::BodyExtractError)
                 }
             }
             StatusCode::UNAUTHORIZED => {

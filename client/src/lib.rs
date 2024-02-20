@@ -9,7 +9,7 @@ pub mod syncer;
 pub mod remote;
 pub mod connection;
 
-use futures::{channel::mpsc::channel, join};
+use futures::{channel::mpsc::channel, try_join};
 use notify::{RecursiveMode};
 use std::path::PathBuf;
 
@@ -60,7 +60,7 @@ pub async fn run(
     );
     debug!("Started syncer");
 
-    join!(indexer, syncer);
+    let _ = try_join!(indexer, syncer)?;
 
     Ok(())
 }

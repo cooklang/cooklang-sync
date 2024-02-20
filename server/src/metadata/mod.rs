@@ -14,10 +14,10 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::auth::User;
 use crate::chunk_id::ChunkId;
 use crate::models::*;
 use crate::schema::*;
-use crate::auth::User;
 
 #[database("diesel")]
 struct Db(diesel::SqliteConnection);

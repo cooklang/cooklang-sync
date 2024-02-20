@@ -1,6 +1,6 @@
 use futures::{
     channel::mpsc::{Receiver},
-    join, StreamExt,
+    try_join, StreamExt,
 };
 use std::path::Path;
 
@@ -9,7 +9,7 @@ use tokio::time::Duration;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use log::{debug, trace, error, info};
+use log::{debug, trace, error, info, warn};
 
 use crate::registry;
 use crate::connection::{ConnectionPool, get_connection};
@@ -28,7 +28,7 @@ pub async fn run(
     chunker: &mut Chunker,
     remote: &Remote,
     mut local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
-) {
+) -> Result<(), SyncError> {
     let chunker = Arc::new(Mutex::new(chunker));
 
     let check_download = async {
@@ -42,8 +42,9 @@ pub async fn run(
             let latest_local = registry::latest_jid(conn).unwrap_or(0);
             let to_download = match remote.list(latest_local).await {
                 Ok(v) => v,
+                Err(SyncError::Unauthorized) => return Err(SyncError::Unauthorized),
                 Err(e) => {
-                    info!("couldn't reach remote server");
+                    warn!("couldn't reach remote server. will try again soon...");
 
                     tokio::time::sleep(NO_INTERNET_SLEEP_SEC).await;
 
@@ -88,6 +89,8 @@ pub async fn run(
 
             remote.poll(INTERVAL_CHECK_DOWNLOAD_SEC).await;
         }
+
+        Ok(())
     };
 
     let check_upload = async {
@@ -154,9 +157,13 @@ pub async fn run(
                 };
             }
         }
+
+        Ok(())
     };
 
-    join!(check_download, check_upload);
+    let _ = try_join!(check_download, check_upload)?;
+
+    Ok(())
 }
 
 fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm,SyncError> {

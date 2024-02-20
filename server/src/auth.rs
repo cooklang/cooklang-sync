@@ -46,13 +46,13 @@ impl<'r> FromRequest<'r> for User {
     type Error = ();
 
     async fn from_request(request: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
-        let tokens = request.headers().get("Authorization").collect::<Vec<_>>();
-
         // println!("{:?}", create_token(100));
 
-        if let Some(token) = tokens.first() {
-            if let Ok(claim) = decode_token(token) {
-                return Outcome::Success(User { id: claim.uid });
+        if let Some(auth_header) = request.headers().get_one("Authorization") {
+            if let Some(token) = auth_header.strip_prefix("Bearer ") {
+                if let Ok(claim) = decode_token(token) {
+                    return Outcome::Success(User { id: claim.uid });
+                }
             }
         }
 

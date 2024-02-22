@@ -121,7 +121,7 @@ TODO
 - namespaces
 - proper error handling
 - report error on unexpeted cache behaviour
-- garbage collection
+- garbage collection on DB
 - use tokio::fs::File::create
 - how to keep it available for opensource (one user?)
 - support of binary files
@@ -133,6 +133,7 @@ TODO
 - extract to core shared datasctuctures
 - test test test
 - metrics for monitoring (cache saturation, miss)
+- report errors externally
 - draw data-flow
 - protect from ddos https://github.com/rousan/multer-rs/blob/master/examples/prevent_dos_attack.rs
 - auto-update

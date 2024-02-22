@@ -2,12 +2,13 @@
 extern crate rocket;
 extern crate diesel;
 
+mod auth;
 mod chunk_id;
 mod chunks;
+mod db;
 mod metadata;
 mod models;
 mod schema;
-mod auth;
 
 #[launch]
 fn rocket() -> _ {

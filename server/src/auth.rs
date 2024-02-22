@@ -1,42 +1,53 @@
-use rocket::serde::{Serialize, Deserialize};
-use rocket::request::{self, Outcome, FromRequest, Request};
+use jsonwebtoken::{
+    decode, encode, errors::ErrorKind, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
 use rocket::http::Status;
-use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey, errors::ErrorKind};
+use rocket::request::{self, FromRequest, Outcome, Request};
+use rocket::serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const TOKEN_EXPIRATION_DAYS: u64 = 100;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
-    uid: u64,  // subject (who the token refers to)
-    exp: usize,   // expiry date
+    uid: u64,   // subject (who the token refers to)
+    exp: usize, // expiry date
 }
 
 pub struct User {
-    id: u64
+    id: u64,
 }
 
 pub fn create_token(user_id: u64) -> String {
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
-        .as_secs() + 60 * 24 * TOKEN_EXPIRATION_DAYS;
+        .as_secs()
+        + 60 * 24 * TOKEN_EXPIRATION_DAYS;
 
-    let claims = Claims { uid: user_id, exp: expiration as usize };
+    let claims = Claims {
+        uid: user_id,
+        exp: expiration as usize,
+    };
 
-    encode(&Header::default(), &claims, &EncodingKey::from_secret("secret".as_ref())).unwrap()
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret("secret".as_ref()),
+    )
+    .unwrap()
 }
 
 fn decode_token(token: &str) -> Result<Claims, ()> {
     match decode::<Claims>(
         token,
         &DecodingKey::from_secret("secret".as_ref()),
-        &Validation::new(Algorithm::HS256)
+        &Validation::new(Algorithm::HS256),
     ) {
         Ok(c) => Ok(c.claims),
         Err(err) => match *err.kind() {
             ErrorKind::ExpiredSignature => Err(()), // Token is expired
-            _ => Err(()), // Some other error
+            _ => Err(()),                           // Some other error
         },
     }
 }

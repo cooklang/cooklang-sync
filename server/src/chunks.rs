@@ -46,7 +46,7 @@ async fn upload_chunks(
         if let Some(parent) = full_path.parent() {
             create_dir_all(parent).await?;
         }
-        let mut file = tokio::fs::File::create(full_path).await.unwrap();
+        let mut file = File::create(full_path).await.unwrap();
         let bytes = field.bytes().await.unwrap();
         let mut cursor = Cursor::new(bytes);
         file.write_all_buf(&mut cursor).await.unwrap();

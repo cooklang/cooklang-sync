@@ -1,4 +1,4 @@
-
+// TODO this is blocking
 use std::fs::{File, create_dir_all};
 use std::io::{prelude::*, BufReader, BufWriter};
 use std::path::{PathBuf};
@@ -37,7 +37,7 @@ impl Chunker {
         let mut buffer = Vec::new();
         let mut hashes = Vec::new();
 
-        // TODO should work for
+        // TODO should work for binary too
         while reader.read_until(b'\n', &mut buffer)? > 0 {
             let data: Vec<u8> = buffer.clone();
             let hash = self.hash(&data);

@@ -10,6 +10,7 @@ mod metadata;
 mod models;
 mod schema;
 
+// TODO need config for root of uploads and also secret for tokens
 #[launch]
 fn rocket() -> _ {
     rocket::build()

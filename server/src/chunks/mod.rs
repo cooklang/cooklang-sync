@@ -8,24 +8,14 @@ use rocket::tokio::fs::{create_dir_all, File};
 use rocket::tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
-use crate::auth::User;
+use crate::auth::user::User;
 use crate::chunk_id::ChunkId;
 
+mod request;
+
+use crate::chunks::request::RawContentType;
+
 const TEXT_LIMIT: ByteUnit = ByteUnit::Kibibyte(64);
-
-use rocket::request::{FromRequest, Outcome};
-
-pub struct RawContentType<'r>(pub &'r str);
-
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for RawContentType<'r> {
-    type Error = ();
-
-    async fn from_request(req: &'r rocket::Request<'_>) -> Outcome<Self, Self::Error> {
-        let header = req.headers().get_one("Content-Type").unwrap_or("");
-        Outcome::Success(RawContentType(header))
-    }
-}
 
 #[post("/", format = "multipart/form-data", data = "<upload>")]
 async fn upload_chunks(
@@ -40,13 +30,13 @@ async fn upload_chunks(
     // TODO prevent from DDOS
     while let Ok(Some(field)) = multipart.next_field().await {
         let field_name = field.name().unwrap();
+        let full_path = ChunkId::from(field_name).file_path();
 
-        let chunk_id = ChunkId::from(field_name);
-        let full_path = chunk_id.file_path();
         if let Some(parent) = full_path.parent() {
             create_dir_all(parent).await?;
         }
-        let mut file = File::create(full_path).await.unwrap();
+
+        let mut file = File::create(full_path).await?;
         let bytes = field.bytes().await.unwrap();
         let mut cursor = Cursor::new(bytes);
         file.write_all_buf(&mut cursor).await.unwrap();

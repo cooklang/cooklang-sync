@@ -7,7 +7,7 @@ use rocket::{Shutdown, State};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use crate::auth::User;
+use crate::auth::user::User;
 
 use crate::db::{insert_new_record, list as db_list, Db};
 use crate::models::{FileRecord, NewFileRecord};

@@ -1,29 +1,26 @@
 use jsonwebtoken::{
     decode, encode, errors::ErrorKind, Algorithm, DecodingKey, EncodingKey, Header, Validation,
 };
-use rocket::http::Status;
-use rocket::request::{self, FromRequest, Outcome, Request};
+
+
 use rocket::serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const TOKEN_EXPIRATION_DAYS: u64 = 100;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    uid: u64,   // subject (who the token refers to)
+pub struct Claims {
+    pub uid: u64,   // subject (who the token refers to)
     exp: usize, // expiry date
 }
 
-pub struct User {
-    id: u64,
-}
 
 pub fn create_token(user_id: u64) -> String {
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
         .as_secs()
-        + 60 * 24 * TOKEN_EXPIRATION_DAYS;
+        + 60 * 60 * 24 * TOKEN_EXPIRATION_DAYS;
 
     let claims = Claims {
         uid: user_id,
@@ -38,7 +35,7 @@ pub fn create_token(user_id: u64) -> String {
     .unwrap()
 }
 
-fn decode_token(token: &str) -> Result<Claims, ()> {
+pub fn decode_token(token: &str) -> Result<Claims, ()> {
     match decode::<Claims>(
         token,
         &DecodingKey::from_secret("secret".as_ref()),
@@ -49,24 +46,5 @@ fn decode_token(token: &str) -> Result<Claims, ()> {
             ErrorKind::ExpiredSignature => Err(()), // Token is expired
             _ => Err(()),                           // Some other error
         },
-    }
-}
-
-#[rocket::async_trait]
-impl<'r> FromRequest<'r> for User {
-    type Error = ();
-
-    async fn from_request(request: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
-        // println!("{:?}", create_token(100));
-
-        if let Some(auth_header) = request.headers().get_one("Authorization") {
-            if let Some(token) = auth_header.strip_prefix("Bearer ") {
-                if let Ok(claim) = decode_token(token) {
-                    return Outcome::Success(User { id: claim.uid });
-                }
-            }
-        }
-
-        Outcome::Error((Status::Unauthorized, ()))
     }
 }

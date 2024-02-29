@@ -1,0 +1,15 @@
+[target.x86_64-linux-android]
+linker = "x86_64-linux-android25-clang"
+ar = "llvm-ar"
+
+[target.i686-linux-android]
+linker = "i686-linux-android25-clang"
+ar = "llvm-ar"
+
+[target.armv7-linux-androideabi]
+linker = "armv7a-linux-androideabi25-clang"
+ar = "llvm-ar"
+
+[target.aarch64-linux-android]
+linker = "aarch64-linux-android25-clang"
+ar = "llvm-ar"

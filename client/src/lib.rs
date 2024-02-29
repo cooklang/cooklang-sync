@@ -23,7 +23,18 @@ const CHANNEL_SIZE: usize = 100;
 uniffi::setup_scaffolding!();
 
 #[uniffi::export]
-pub async fn run(
+pub fn run(
+    storage_dir: &str,
+    db_file_path: &str,
+    api_endpoint: &str,
+    remote_token: &str,
+) -> Result<(), errors::SyncError> {
+    tokio::runtime::Runtime::new()?.block_on(run_async(storage_dir, db_file_path, api_endpoint, remote_token))?;
+
+    Ok(())
+}
+
+async fn run_async(
     storage_dir: &str,
     db_file_path: &str,
     api_endpoint: &str,

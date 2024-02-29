@@ -29,3 +29,15 @@ tokio = { version = "1.35.1", features = ["time", "fs", "macros", "rt-multi-thre
 uniffi = "0.26.1"
 uuid = { version = "1.7.0", features = ["v4"] }
 walkdir = "2.4.0"
+openssl = { version = "0.10", features = ["vendored"] }
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+
+[[bin]]
+# workaround: https://mozilla.github.io/uniffi-rs/tutorial/foreign_language_bindings.html#creating-the-bindgen-binary
+# This can be whatever name makes sense for your project, but the rest of this tutorial assumes uniffi-bindgen.
+name = "uniffi-bindgen"
+path = "src/uniffi-bindgen.rs"
+required-features = ["uniffi/cli"]

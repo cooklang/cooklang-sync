@@ -4,23 +4,23 @@ use thiserror::Error;
 #[derive(uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum SyncError {
-    #[error("IO error")]
+    #[error("IO error {0}")]
     IoError(#[from] std::io::Error),
-    #[error("Notify error")]
+    #[error("Notify error {0}")]
     NotifyError(#[from] notify::Error),
-    #[error("Strip prefix error")]
+    #[error("Strip prefix error {0}")]
     StripPrefix(#[from] std::path::StripPrefixError),
-    #[error("System time error")]
+    #[error("System time error {0}")]
     SystemTime(#[from] std::time::SystemTimeError),
-    #[error("Conversion error")]
+    #[error("Conversion error {0}")]
     Convert(#[from] std::num::TryFromIntError),
-    #[error("Database query error")]
+    #[error("Database query error {0}")]
     DBQueryError(#[from] diesel::result::Error),
-    #[error("Reqwest error")]
+    #[error("Reqwest error {0}")]
     ReqwestError(#[from] reqwest::Error),
-    #[error("Error sending value to a channel")]
+    #[error("Error sending value to a channel {0}")]
     ChannelSendError(#[from] futures::channel::mpsc::SendError),
-    #[error("Connection init error")]
+    #[error("Connection init error {0}")]
     ConnectionInitError(String),
     #[error("Unauthorized token")]
     Unauthorized,

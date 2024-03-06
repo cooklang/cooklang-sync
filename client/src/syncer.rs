@@ -69,7 +69,7 @@ async fn check_upload(
 
             if !f.deleted {
                 // Also warms up the cache
-                chunk_ids = chunker.hashify(&f.path)?;
+                chunk_ids = chunker.hashify(&f.path).await?;
             }
 
             let r = remote.commit(&f.path, f.deleted, &chunk_ids.join(","), "t").await?;
@@ -145,24 +145,24 @@ async fn check_download(
                 let form = build_delete_form(&d.path, storage_path, d.id);
                 // TODO atomic?
                 registry::delete(conn, &vec![form])?;
-                chunker.delete(&d.path)?;
+                chunker.delete(&d.path).await?;
             } else {
                 let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
 
                 // Warm-up cache to include chunks from an old file
                 if chunker.exists(&d.path) {
-                    chunker.hashify(&d.path)?;
+                    chunker.hashify(&d.path).await?;
                 }
 
                 for c in &chunks {
                     if !chunker.check_chunk(c)? {
-                        chunker.save_chunk(c, remote.download(c).await?)?;
+                        chunker.save_chunk(c, remote.download(c).await?);
                     }
                 }
 
                 // TODO atomic? store in tmp first and then move?
                 // TODO should be after we create record in db
-                if let Err(e) = chunker.save(&d.path, chunks) {
+                if let Err(e) = chunker.save(&d.path, chunks).await{
                     error!("{:?}", e);
                 }
 

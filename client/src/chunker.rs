@@ -1,13 +1,9 @@
-// TODO this is blocking
-use std::fs::{File, create_dir_all};
-use std::io::{prelude::*, BufReader, BufWriter};
+use tokio::fs::{self, File, create_dir_all};
+use tokio::io::{BufReader, BufWriter, AsyncBufReadExt, AsyncWriteExt};
 use std::path::{PathBuf};
-use std::fs;
 
 use sha2::{Sha256, Digest};
-
 use log::{trace};
-
 use quick_cache::{Weighter, sync::Cache};
 
 use crate::errors::SyncError;
@@ -31,14 +27,14 @@ impl Chunker {
         base
     }
 
-    pub fn hashify(&mut self, path: &str) -> Result<Vec<String>> {
-        let file = File::open(self.full_path(path))?;
+    pub async fn hashify(&mut self, path: &str) -> Result<Vec<String>> {
+        let file = File::open(self.full_path(path)).await?;
         let mut reader = BufReader::new(file);
         let mut buffer = Vec::new();
         let mut hashes = Vec::new();
 
         // TODO should work for binary too
-        while reader.read_until(b'\n', &mut buffer)? > 0 {
+        while reader.read_until(b'\n', &mut buffer).await? > 0 {
             let data: Vec<u8> = buffer.clone();
             let hash = self.hash(&data);
             self.save_chunk(&hash, data)?;
@@ -69,34 +65,34 @@ impl Chunker {
     }
 
     // TODO can be a problem as it expects cache to contain all chunks
-    pub fn save(&mut self, path: &str, hashes: Vec<&str>) -> Result<()> {
+    pub async fn save(&mut self, path: &str, hashes: Vec<&str>) -> Result<()> {
         trace!("saving {:?}", path);
         let full_path = self.full_path(path);
         if let Some(parent) = full_path.parent() {
-            create_dir_all(parent)?;
+            create_dir_all(parent).await?;
         }
 
-        let file = File::create(full_path)?;
+        let file = File::create(full_path).await?;
         let mut writer = BufWriter::new(file);
 
 
         for hash in hashes {
             let chunk = self.cache.get(hash)?;
 
-            writer.write_all(&chunk)?;
+            writer.write_all(&chunk).await?;
         }
 
-        writer.flush()?;
+        writer.flush().await?;
 
         Ok(())
     }
 
-    pub fn delete(&mut self, path: &str) -> Result<()> {
+    pub async fn delete(&mut self, path: &str) -> Result<()> {
         trace!("deleting {:?}", path);
         let full_path = self.full_path(path);
 
         // TODO delete folders up too
-        fs::remove_file(full_path)?;
+        fs::remove_file(full_path).await?;
 
         Ok(())
     }
@@ -111,7 +107,11 @@ impl Chunker {
 
 
     pub fn check_chunk(&self, chunk_hash: &str) -> Result<bool> {
-        Ok(self.cache.contains(chunk_hash))
+        if chunk_hash == "" {
+            Ok(true)
+        } else {
+            Ok(self.cache.contains(chunk_hash))
+        }
     }
 }
 

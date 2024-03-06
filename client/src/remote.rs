@@ -177,7 +177,8 @@ impl Remote {
                 Err(SyncError::Unauthorized)
             }
             _ => {
-                Err(SyncError::Unknown)
+                // Don't need to error as it's expected to be cancelled from time to time
+                Ok(())
             }
         }
     }

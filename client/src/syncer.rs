@@ -85,7 +85,7 @@ async fn check_upload(
                         size += data.len();
                         last.push((c.into(), data));
 
-                        if size > 1_000_000 {
+                        if size > 10_000 {
                             upload_payload.push(vec![]);
                             last = upload_payload.last_mut().unwrap();
                             size = 0;

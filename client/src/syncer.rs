@@ -57,14 +57,13 @@ async fn check_upload(
 
         let to_upload = registry::updated_locally(conn)?;
 
-        let mut chunker = chunker.lock().await;
         let mut upload_payload: Vec<Vec<(String, Vec<u8>)>> = vec![vec![]];
         let mut size = 0;
         let mut last = upload_payload.last_mut().unwrap();
 
         for f in &to_upload {
             trace!("to upload {:?}", f);
-
+            let mut chunker = chunker.lock().await;
             let mut chunk_ids = vec![String::from("")];
 
             if !f.deleted {

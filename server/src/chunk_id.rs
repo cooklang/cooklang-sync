@@ -29,6 +29,10 @@ impl ChunkId<'_> {
 
     /// Returns the path to the chunk in `upload/` corresponding to this ID.
     pub fn is_present(&self) -> bool {
+        if self.0.as_ref() == "" {
+            return true
+        }
+
         self.file_path().exists()
     }
 }

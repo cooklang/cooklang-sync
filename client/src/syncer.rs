@@ -76,9 +76,11 @@ async fn check_upload(
 
             match r {
                 CommitResultStatus::Success(jid) => {
+                    trace!("commit success");
                     registry::update_jid(conn, f, jid)?;
                 },
                 CommitResultStatus::NeedChunks(chunks) => {
+                    trace!("need chunks");
                     for c in chunks.split(',') {
                         let data = chunker.read_chunk(c)?;
                         size += data.len();

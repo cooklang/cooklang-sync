@@ -78,7 +78,7 @@ fn filter_eligible(p: &Path) -> bool {
 
     if let Some(ext) = p.extension() {
         // TODO allow generic
-        ext == "cook"
+        ext == "cook" || ext == "conf" || ext == "yaml" || ext == "yml"
     } else {
         false
     }

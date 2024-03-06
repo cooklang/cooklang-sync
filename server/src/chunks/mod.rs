@@ -16,6 +16,7 @@ mod request;
 use crate::chunks::request::RawContentType;
 
 const TEXT_LIMIT: ByteUnit = ByteUnit::Kibibyte(64);
+const EMPTY_CHUNK_ID: ChunkId = ChunkId(std::borrow::Cow::Borrowed(""));
 
 #[post("/", format = "multipart/form-data", data = "<upload>")]
 async fn upload_chunks(
@@ -30,7 +31,13 @@ async fn upload_chunks(
     // TODO prevent from DDOS
     while let Ok(Some(field)) = multipart.next_field().await {
         let field_name = field.name().unwrap();
-        let full_path = ChunkId::from(field_name).file_path();
+        let chunk_id = ChunkId::from(field_name);
+
+        if chunk_id == EMPTY_CHUNK_ID {
+            continue;
+        }
+
+        let full_path = chunk_id.file_path();
 
         if let Some(parent) = full_path.parent() {
             create_dir_all(parent).await?;
@@ -49,7 +56,11 @@ async fn upload_chunks(
 // TODO batch download
 #[get("/<id>")]
 async fn retrieve(_user: User, id: ChunkId<'_>) -> Option<RawText<File>> {
-    File::open(id.file_path()).await.map(RawText).ok()
+    if id == EMPTY_CHUNK_ID {
+        None
+    } else {
+        File::open(id.file_path()).await.map(RawText).ok()
+    }
 }
 
 pub fn stage() -> AdHoc {

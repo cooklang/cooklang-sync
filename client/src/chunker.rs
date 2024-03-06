@@ -139,6 +139,9 @@ impl InMemoryCache {
     }
 
     fn get(&self, chunk_hash: &str) -> Result<Vec<u8>> {
+        if chunk_hash == "" {
+            return Ok(vec![])
+        }
         match self.cache.get(chunk_hash) {
             Some(content) => Ok(content.clone()),
             None => Err(SyncError::GetFromCacheError),

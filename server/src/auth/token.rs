@@ -2,7 +2,6 @@ use jsonwebtoken::{
     decode, encode, errors::ErrorKind, Algorithm, DecodingKey, EncodingKey, Header, Validation,
 };
 
-
 use rocket::serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -13,7 +12,6 @@ pub struct Claims {
     pub uid: u64,   // subject (who the token refers to)
     exp: usize, // expiry date
 }
-
 
 pub fn create_token(user_id: u64) -> String {
     let expiration = SystemTime::now()

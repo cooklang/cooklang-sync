@@ -1,3 +1,4 @@
+use std::env;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
@@ -11,18 +12,17 @@ impl ChunkId<'_> {
     /// Returns the path to the chunk in `upload/` corresponding to this ID.
     pub fn file_path(&self) -> PathBuf {
         // TODO make parameter
-        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/", "upload");
+        let root = env::var("UPLOAD_DIR").unwrap_or(String::from("./upload"));
         let id_str = self.0.as_ref();
 
-        // Ensure the ID is long enough
         if id_str.len() < 2 {
-            panic!("Chunk ID is too short, must be at least 2 characters long");
+            return Path::new(&root).join("null").join(id_str)
         }
 
         let first_char = &id_str[0..1];
         let second_char = &id_str[1..2];
 
-        Path::new(root)
+        Path::new(&root)
             .join(first_char)
             .join(second_char)
             .join(id_str)

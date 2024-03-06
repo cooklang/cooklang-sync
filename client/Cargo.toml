@@ -9,6 +9,12 @@ edition = "2021"
 path = "src/main.rs"
 name = "client"
 
+[lib]
+path = "src/lib.rs"
+name = "cooklang_sync_client"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+
 [dependencies]
 diesel = { version = "2.1.4", features = ["sqlite", "time", "r2d2"] }
 diesel_migrations = { version = "2.1.0", features = ["sqlite"] }
@@ -30,9 +36,6 @@ uniffi = "0.26.1"
 uuid = { version = "1.7.0", features = ["v4"] }
 walkdir = "2.4.0"
 openssl = { version = "0.10", features = ["vendored"] }
-
-[lib]
-crate-type = ["cdylib", "staticlib"]
 
 
 [[bin]]

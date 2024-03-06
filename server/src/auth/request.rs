@@ -1,8 +1,5 @@
-
 use rocket::http::Status;
 use rocket::request::{self, FromRequest, Outcome, Request};
-
-
 
 use super::user::User;
 use super::token::decode_token;

@@ -1,12 +1,12 @@
+use diesel::dsl::{max, sql};
 use diesel::prelude::*;
 use diesel::{insert_into, update};
-use diesel::dsl::{max,sql};
 
-use log::{trace};
+use log::trace;
 
+use crate::connection::Connection;
 use crate::models::*;
 use crate::schema::*;
-use crate::connection::Connection;
 
 type Result<T, E = diesel::result::Error> = std::result::Result<T, E>;
 
@@ -28,9 +28,7 @@ pub fn update_jid(conn: &mut Connection, record: &FileRecord, jid: i32) -> Resul
 pub fn delete(conn: &mut Connection, forms: &Vec<DeleteForm>) -> Result<usize> {
     trace!("marking as deleted {:?}", forms);
 
-    insert_into(file_records::table)
-        .values(forms)
-        .execute(conn)
+    insert_into(file_records::table).values(forms).execute(conn)
 }
 
 pub fn non_deleted(conn: &mut Connection) -> Result<Vec<FileRecord>> {
@@ -73,7 +71,6 @@ pub fn updated_locally(conn: &mut Connection) -> Result<Vec<FileRecord>> {
     query.load::<FileRecord>(conn)
 }
 
-
 pub fn latest_jid(conn: &mut Connection) -> Result<i32> {
     trace!("latest_jid");
 
@@ -85,6 +82,6 @@ pub fn latest_jid(conn: &mut Connection) -> Result<i32> {
 
     match r {
         Ok(r) => Ok(r.jid.unwrap_or(0)),
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }

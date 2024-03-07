@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use log::{trace};
+use log::trace;
 
-use reqwest::{multipart, StatusCode};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use reqwest::{multipart, StatusCode};
 
 use crate::errors::SyncError;
 
@@ -33,18 +33,16 @@ pub struct Remote {
 }
 
 impl Remote {
-
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
         Self {
             api_endpoint: api_endpoint.into(),
             uuid: Uuid::new_v4().into(),
             token: token.into(),
-            client: reqwest::Client::new()
+            client: reqwest::Client::new(),
         }
     }
 }
 impl Remote {
-
     fn auth_headers(&self) -> HeaderMap {
         let auth_value = format!("Bearer {}", self.token);
 
@@ -54,10 +52,11 @@ impl Remote {
         headers
     }
 
-    pub async fn upload(&self, chunk: &str, content: Vec<u8>) -> Result<()>{
+    pub async fn upload(&self, chunk: &str, content: Vec<u8>) -> Result<()> {
         trace!("uploading chunk {:?}", chunk);
 
-        let response = self.client
+        let response = self
+            .client
             .post(self.api_endpoint.clone() + "/chunks/" + chunk)
             .headers(self.auth_headers())
             .body(content)
@@ -65,15 +64,9 @@ impl Remote {
             .await?;
 
         match response.status() {
-            StatusCode::OK => {
-                Ok(())
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(SyncError::Unauthorized)
-            }
-            _ => {
-                Err(SyncError::Unknown)
-            }
+            StatusCode::OK => Ok(()),
+            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            _ => Err(SyncError::Unknown),
         }
     }
 
@@ -86,7 +79,8 @@ impl Remote {
             form = form.part(chunk, multipart::Part::bytes(content));
         }
 
-        let response = self.client
+        let response = self
+            .client
             .post(self.api_endpoint.clone() + "/chunks/")
             .headers(self.auth_headers())
             .multipart(form)
@@ -94,40 +88,29 @@ impl Remote {
             .await?;
 
         match response.status() {
-            StatusCode::OK => {
-                Ok(())
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(SyncError::Unauthorized)
-            }
-            _ => {
-                Err(SyncError::Unknown)
-            }
+            StatusCode::OK => Ok(()),
+            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            _ => Err(SyncError::Unknown),
         }
     }
 
-    pub async fn download(&self, chunk: &str) -> Result<Vec<u8>>{
+    pub async fn download(&self, chunk: &str) -> Result<Vec<u8>> {
         trace!("downloading chunk {:?}", chunk);
 
-        let response = self.client
+        let response = self
+            .client
             .get(self.api_endpoint.clone() + "/chunks/" + chunk)
             .headers(self.auth_headers())
             .send()
             .await?;
 
         match response.status() {
-            StatusCode::OK => {
-                match response.bytes().await {
-                    Ok(bytes) => Ok(bytes.to_vec()),
-                    Err(_) => Err(SyncError::BodyExtractError)
-                }
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(SyncError::Unauthorized)
-            }
-            _ => {
-                Err(SyncError::Unknown)
-            }
+            StatusCode::OK => match response.bytes().await {
+                Ok(bytes) => Ok(bytes.to_vec()),
+                Err(_) => Err(SyncError::BodyExtractError),
+            },
+            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            _ => Err(SyncError::Unknown),
         }
     }
 
@@ -136,7 +119,8 @@ impl Remote {
 
         let jid_string = local_jid.to_string();
 
-        let response = self.client
+        let response = self
+            .client
             .get(self.api_endpoint.clone() + "/metadata/list?jid=" + &jid_string)
             .headers(self.auth_headers())
             .send()
@@ -148,12 +132,8 @@ impl Remote {
 
                 Ok(records)
             }
-            StatusCode::UNAUTHORIZED => {
-                Err(SyncError::Unauthorized)
-            }
-            _ => {
-                Err(SyncError::Unknown)
-            }
+            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            _ => Err(SyncError::Unknown),
         }
     }
 
@@ -162,20 +142,22 @@ impl Remote {
 
         let seconds_string = seconds.to_string();
 
-        let response = self.client
-            .get(self.api_endpoint.clone() + "/metadata/poll?seconds=" + &seconds_string + "&uuid=" + &self.uuid)
+        let response = self
+            .client
+            .get(
+                self.api_endpoint.clone()
+                    + "/metadata/poll?seconds="
+                    + &seconds_string
+                    + "&uuid="
+                    + &self.uuid,
+            )
             .headers(self.auth_headers())
             .send()
             .await?;
 
-
         match response.status() {
-            StatusCode::OK => {
-                Ok(())
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(SyncError::Unauthorized)
-            }
+            StatusCode::OK => Ok(()),
+            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
             _ => {
                 // Don't need to error as it's expected to be cancelled from time to time
                 Ok(())
@@ -183,7 +165,13 @@ impl Remote {
         }
     }
 
-    pub async fn commit(&self, path: &str, deleted: bool, chunk_ids: &str, format: &str) -> Result<CommitResultStatus> {
+    pub async fn commit(
+        &self,
+        path: &str,
+        deleted: bool,
+        chunk_ids: &str,
+        format: &str,
+    ) -> Result<CommitResultStatus> {
         trace!("commit {:?}", path);
 
         let params = [
@@ -193,7 +181,8 @@ impl Remote {
             ("path", path),
         ];
 
-        let response = self.client
+        let response = self
+            .client
             .post(self.api_endpoint.clone() + "/metadata/commit" + "?uuid=" + &self.uuid)
             .headers(self.auth_headers())
             .form(&params)
@@ -206,12 +195,8 @@ impl Remote {
 
                 Ok(records)
             }
-            StatusCode::UNAUTHORIZED => {
-                Err(SyncError::Unauthorized)
-            }
-            _ => {
-                Err(SyncError::Unknown)
-            }
+            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            _ => Err(SyncError::Unknown),
         }
     }
 }

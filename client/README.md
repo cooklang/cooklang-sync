@@ -121,19 +121,20 @@ TODO
 - namespaces
 - proper error handling
 - report error on unexpeted cache behaviour
-- garbage collection on DB
-- use tokio::fs::File::create
-- how to keep it available for opensource (one user?)
 - support of binary files
     - by extension select text files, the rest is binary
-
 - bundling of uploads/downloads
-- make sure non-blocking behavour
-- add documentation
+- don't need to throw unknown error in each non-200 response
+
 - extract to core shared datasctuctures
+- garbage collection on DB
 - test test test
 - metrics for monitoring (cache saturation, miss)
-- report errors externally
-- draw data-flow
 - protect from ddos https://github.com/rousan/multer-rs/blob/master/examples/prevent_dos_attack.rs
-- auto-update
+- auto-update client
+
+open sourcing
+=============
+- how to keep it available for opensource (one user?)
+- add documentation
+- draw data-flow

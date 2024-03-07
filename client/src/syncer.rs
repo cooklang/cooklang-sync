@@ -1,22 +1,19 @@
-use futures::{
-    channel::mpsc::{Receiver},
-    try_join, StreamExt,
-};
+use futures::{channel::mpsc::Receiver, try_join, StreamExt};
 use std::path::Path;
 
-use time::OffsetDateTime;
-use tokio::time::Duration;
 use std::sync::Arc;
+use time::OffsetDateTime;
 use tokio::sync::Mutex;
+use tokio::time::Duration;
 
-use log::{debug, trace, error, warn};
+use log::{debug, error, trace, warn};
 
-use crate::registry;
-use crate::connection::{ConnectionPool, get_connection};
-use crate::models;
-use crate::errors::SyncError;
 use crate::chunker::Chunker;
-use crate::remote::{Remote, CommitResultStatus};
+use crate::connection::{get_connection, ConnectionPool};
+use crate::errors::SyncError;
+use crate::models;
+use crate::registry;
+use crate::remote::{CommitResultStatus, Remote};
 
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
@@ -30,13 +27,28 @@ pub async fn run(
     chunker: &mut Chunker,
     remote: &Remote,
     local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
+    read_only: bool,
 ) -> Result<()> {
     let chunker = Arc::new(Mutex::new(chunker));
 
-    let _ = try_join!(
-        check_upload(pool, Arc::clone(&chunker), remote, local_registry_updated_rx),
-        check_download(pool, Arc::clone(&chunker), remote, storage_path)
-    )?;
+    if read_only {
+        let _ = try_join!(check_download(
+            pool,
+            Arc::clone(&chunker),
+            remote,
+            storage_path
+        ))?;
+    } else {
+        let _ = try_join!(
+            check_upload(
+                pool,
+                Arc::clone(&chunker),
+                remote,
+                local_registry_updated_rx
+            ),
+            check_download(pool, Arc::clone(&chunker), remote, storage_path)
+        )?;
+    }
 
     Ok(())
 }
@@ -71,13 +83,15 @@ async fn check_upload(
                 chunk_ids = chunker.hashify(&f.path).await?;
             }
 
-            let r = remote.commit(&f.path, f.deleted, &chunk_ids.join(","), "t").await?;
+            let r = remote
+                .commit(&f.path, f.deleted, &chunk_ids.join(","), "t")
+                .await?;
 
             match r {
                 CommitResultStatus::Success(jid) => {
                     trace!("commit success");
                     registry::update_jid(conn, f, jid)?;
-                },
+                }
                 CommitResultStatus::NeedChunks(chunks) => {
                     trace!("need chunks");
                     for c in chunks.split(',') {
@@ -91,7 +105,7 @@ async fn check_upload(
                             size = 0;
                         }
                     }
-                },
+                }
             }
         }
 
@@ -132,7 +146,7 @@ async fn check_download(
                 tokio::time::sleep(NO_INTERNET_SLEEP_SEC).await;
 
                 continue;
-            },
+            }
         };
 
         for d in &to_download {
@@ -155,13 +169,13 @@ async fn check_download(
 
                 for c in &chunks {
                     if !chunker.check_chunk(c)? {
-                        chunker.save_chunk(c, remote.download(c).await?);
+                        chunker.save_chunk(c, remote.download(c).await?)?;
                     }
                 }
 
                 // TODO atomic? store in tmp first and then move?
                 // TODO should be after we create record in db
-                if let Err(e) = chunker.save(&d.path, chunks).await{
+                if let Err(e) = chunker.save(&d.path, chunks).await {
                     error!("{:?}", e);
                 }
 
@@ -174,10 +188,10 @@ async fn check_download(
     }
 }
 
-fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm,SyncError> {
+fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm, SyncError> {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
-    let metadata =full_path.metadata()?;
+    let metadata = full_path.metadata()?;
     let size: i64 = metadata.len().try_into()?;
     let time = metadata.modified()?;
     let modified_at = OffsetDateTime::from(time);
@@ -204,6 +218,6 @@ fn build_delete_form(path: &str, base: &Path, jid: i32) -> models::DeleteForm {
         deleted: true,
         size: 0,
         format: "t".to_string(),
-        modified_at: OffsetDateTime::now_utc()
+        modified_at: OffsetDateTime::now_utc(),
     }
 }

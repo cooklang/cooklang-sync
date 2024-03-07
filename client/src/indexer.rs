@@ -6,17 +6,16 @@ use std::collections::HashMap;
 use std::path::Path;
 use walkdir::WalkDir;
 
-
 use notify_debouncer_mini::DebounceEventResult;
 use time::OffsetDateTime;
 use tokio::time::Duration;
 
-use log::{debug};
+use log::debug;
 
-use crate::registry;
+use crate::connection::{get_connection, ConnectionPool};
 use crate::errors::SyncError;
-use crate::connection::{ConnectionPool, get_connection};
 use crate::models::*;
+use crate::registry;
 
 type DBFiles = HashMap<String, FileRecord>;
 type DiskFiles = HashMap<String, CreateForm>;
@@ -24,7 +23,7 @@ type DiskFiles = HashMap<String, CreateForm>;
 const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(61);
 
 /// Indexer main loop. It doesn't manipulate files, but only
-/// compares what we have on a disk with what we have in DB.
+/// compares what we have in filesystem with what we have in DB.
 /// If it finds a difference it will update DB records.
 /// When any change made it will send a message in channel
 /// that Syncer is listening.
@@ -36,7 +35,6 @@ pub async fn run(
     mut local_file_update_rx: Receiver<DebounceEventResult>,
     mut updated_tx: Sender<IndexerUpdateEvent>,
 ) -> Result<(), SyncError> {
-
     loop {
         debug!("interval scan");
 
@@ -66,9 +64,7 @@ pub async fn run(
             Some(_) = local_file_update_rx.next() => {},
         };
     }
-
 }
-
 
 fn filter_eligible(p: &Path) -> bool {
     // TODO properly follow symlinks, they can be broken as well
@@ -84,7 +80,7 @@ fn filter_eligible(p: &Path) -> bool {
     }
 }
 
-fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles,SyncError> {
+fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles, SyncError> {
     let mut cache = HashMap::new();
 
     let iter = WalkDir::new(base_path)
@@ -102,7 +98,7 @@ fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles,SyncError> {
     Ok(cache)
 }
 
-fn get_file_records_from_registry(pool: &ConnectionPool) -> Result<DBFiles,SyncError> {
+fn get_file_records_from_registry(pool: &ConnectionPool) -> Result<DBFiles, SyncError> {
     let mut cache = HashMap::new();
 
     let conn = &mut get_connection(pool)?;
@@ -114,10 +110,7 @@ fn get_file_records_from_registry(pool: &ConnectionPool) -> Result<DBFiles,SyncE
     Ok(cache)
 }
 
-fn compare_records(
-    from_db: DBFiles,
-    from_fs: DiskFiles,
-) -> (Vec<DeleteForm>, Vec<CreateForm>) {
+fn compare_records(from_db: DBFiles, from_fs: DiskFiles) -> (Vec<DeleteForm>, Vec<CreateForm>) {
     let mut to_remove: Vec<DeleteForm> = Vec::new();
     let mut to_add: Vec<CreateForm> = Vec::new();
 
@@ -148,8 +141,7 @@ fn compare_records(
     (to_remove, to_add)
 }
 
-
-fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm,SyncError> {
+fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm, SyncError> {
     let metadata = path.metadata()?;
     let path = path.strip_prefix(base)?.to_string_lossy().into_owned();
     let size: i64 = metadata.len().try_into()?;
@@ -166,7 +158,6 @@ fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm,SyncError> {
     };
 
     Ok(f)
-
 }
 
 fn build_delete_form(record: &FileRecord) -> DeleteForm {

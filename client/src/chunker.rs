@@ -1,10 +1,10 @@
-use tokio::fs::{self, File, create_dir_all};
-use tokio::io::{BufReader, BufWriter, AsyncBufReadExt, AsyncWriteExt};
-use std::path::{PathBuf};
+use std::path::PathBuf;
+use tokio::fs::{self, create_dir_all, File};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
-use sha2::{Sha256, Digest};
-use log::{trace};
-use quick_cache::{Weighter, sync::Cache};
+use log::trace;
+use quick_cache::{sync::Cache, Weighter};
+use sha2::{Digest, Sha256};
 
 use crate::errors::SyncError;
 
@@ -14,7 +14,6 @@ pub struct Chunker {
 }
 
 type Result<T, E = SyncError> = std::result::Result<T, E>;
-
 
 impl Chunker {
     pub fn new(cache: InMemoryCache, base_path: PathBuf) -> Chunker {
@@ -75,7 +74,6 @@ impl Chunker {
         let file = File::create(full_path).await?;
         let mut writer = BufWriter::new(file);
 
-
         for hash in hashes {
             let chunk = self.cache.get(hash)?;
 
@@ -105,16 +103,14 @@ impl Chunker {
         self.cache.set(chunk_hash, content)
     }
 
-
     pub fn check_chunk(&self, chunk_hash: &str) -> Result<bool> {
-        if chunk_hash == "" {
+        if chunk_hash.is_empty() {
             Ok(true)
         } else {
             Ok(self.cache.contains(chunk_hash))
         }
     }
 }
-
 
 #[derive(Clone)]
 pub struct BytesWeighter;
@@ -126,21 +122,20 @@ impl Weighter<String, Vec<u8>> for BytesWeighter {
     }
 }
 
-
 pub struct InMemoryCache {
-    cache: Cache<String, Vec<u8>, BytesWeighter>
+    cache: Cache<String, Vec<u8>, BytesWeighter>,
 }
 
 impl InMemoryCache {
     pub fn new(total_keys: usize, total_weight: u64) -> InMemoryCache {
         InMemoryCache {
-            cache: Cache::with_weighter(total_keys, total_weight, BytesWeighter)
+            cache: Cache::with_weighter(total_keys, total_weight, BytesWeighter),
         }
     }
 
     fn get(&self, chunk_hash: &str) -> Result<Vec<u8>> {
-        if chunk_hash == "" {
-            return Ok(vec![])
+        if chunk_hash.is_empty() {
+            return Ok(vec![]);
         }
         match self.cache.get(chunk_hash) {
             Some(content) => Ok(content.clone()),

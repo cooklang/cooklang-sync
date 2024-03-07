@@ -1,16 +1,16 @@
 pub mod chunker;
+pub mod connection;
 pub mod errors;
 pub mod file_watcher;
 pub mod indexer;
-pub mod registry;
 pub mod models;
+pub mod registry;
+pub mod remote;
 pub mod schema;
 pub mod syncer;
-pub mod remote;
-pub mod connection;
 
 use futures::{channel::mpsc::channel, try_join};
-use notify::{RecursiveMode};
+use notify::RecursiveMode;
 use std::path::PathBuf;
 
 use log::debug;
@@ -28,8 +28,15 @@ pub fn run(
     db_file_path: &str,
     api_endpoint: &str,
     remote_token: &str,
+    read_only: bool,
 ) -> Result<(), errors::SyncError> {
-    tokio::runtime::Runtime::new()?.block_on(run_async(storage_dir, db_file_path, api_endpoint, remote_token))?;
+    tokio::runtime::Runtime::new()?.block_on(run_async(
+        storage_dir,
+        db_file_path,
+        api_endpoint,
+        remote_token,
+        read_only,
+    ))?;
 
     Ok(())
 }
@@ -39,6 +46,7 @@ async fn run_async(
     db_file_path: &str,
     api_endpoint: &str,
     remote_token: &str,
+    read_only: bool,
 ) -> Result<(), errors::SyncError> {
     let (mut debouncer, local_file_update_rx) = async_watcher()?;
     let (local_registry_updated_tx, local_registry_updated_rx) = channel(CHANNEL_SIZE);
@@ -51,8 +59,12 @@ async fn run_async(
     let pool = connection::get_connection_pool(db_file_path)?;
     debug!("Started connection pool for {:?}", db_file_path);
 
-    debouncer.watcher().watch(storage_dir, RecursiveMode::Recursive)?;
-    debug!("Started watcher on {:?}", storage_dir);
+    if !read_only {
+        debouncer
+            .watcher()
+            .watch(storage_dir, RecursiveMode::Recursive)?;
+        debug!("Started watcher on {:?}", storage_dir);
+    }
 
     let indexer = indexer::run(
         &pool,
@@ -68,6 +80,7 @@ async fn run_async(
         chunker,
         remote,
         local_registry_updated_rx,
+        read_only,
     );
     debug!("Started syncer");
 

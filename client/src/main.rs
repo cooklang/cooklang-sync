@@ -1,6 +1,5 @@
 use cooklang_sync_client::run;
 
-
 fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
     env_logger::init();
 
@@ -11,7 +10,7 @@ fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
         let db_path = &args[2];
         let api_endpoint = &args[3];
         let client_token = &args[4];
-        run(monitor_path, db_path, api_endpoint, client_token)?;
+        run(monitor_path, db_path, api_endpoint, client_token, false)?;
     } else {
         panic!("No arguments were provided.");
     }

@@ -1,7 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error,Debug)]
-#[derive(uniffi::Error)]
+#[derive(Error, Debug, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum SyncError {
     #[error("IO error {0}")]

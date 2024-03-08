@@ -10,7 +10,6 @@ pub struct FileRecord {
     pub id: i32,
     pub chunk_ids: String,
     pub deleted: bool,
-    pub format: String,
     pub path: String,
 }
 
@@ -21,6 +20,5 @@ pub struct FileRecord {
 pub struct NewFileRecord {
     pub chunk_ids: String,
     pub deleted: bool,
-    pub format: String,
     pub path: String,
 }

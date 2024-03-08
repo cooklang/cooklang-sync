@@ -1,13 +1,26 @@
 use crate::schema::file_records;
 use diesel::prelude::*;
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+
+use diesel::{AsExpression, FromSqlRow};
+
+use diesel::sql_types::Integer;
+
+#[repr(i32)]
+#[derive(Debug, Clone, Copy, AsExpression, FromSqlRow, PartialEq, Deserialize, Serialize)]
+#[diesel(sql_type = Integer)]
+pub enum FileFormat {
+    Binary = 1,
+    Text = 2,
+}
 
 #[derive(Debug)]
 pub enum IndexerUpdateEvent {
     Updated,
 }
 
-#[derive(Queryable, Selectable, Identifiable, Clone, Debug)]
+#[derive(Queryable, Selectable, Identifiable, Debug, Clone)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecord {
@@ -15,36 +28,33 @@ pub struct FileRecord {
     pub jid: Option<i32>,
     pub deleted: bool,
     pub path: String,
-    pub format: String,
     pub size: i64,
     pub modified_at: OffsetDateTime,
 }
 
-#[derive(Insertable, Clone, Debug)]
+#[derive(Insertable, Debug, Clone)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct CreateForm {
     pub jid: Option<i32>,
     pub path: String,
-    pub format: String,
     pub deleted: bool,
     pub size: i64,
     pub modified_at: OffsetDateTime,
 }
 
-#[derive(Insertable, Clone, Debug)]
+#[derive(Insertable, Debug, Clone)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct DeleteForm {
     pub path: String,
     pub jid: Option<i32>,
-    pub format: String,
     pub size: i64,
     pub modified_at: OffsetDateTime,
     pub deleted: bool,
 }
 
-#[derive(AsChangeset, Clone, Debug)]
+#[derive(AsChangeset, Debug, Clone)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordUpdateForm {
@@ -52,14 +62,14 @@ pub struct FileRecordUpdateForm {
     pub modified_at: OffsetDateTime,
 }
 
-#[derive(AsChangeset, Clone, Debug)]
+#[derive(AsChangeset, Debug, Clone)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordNonDeletedFilterForm {
     pub deleted: bool,
 }
 
-#[derive(AsChangeset, Clone, Debug)]
+#[derive(AsChangeset, Debug, Clone)]
 #[diesel(table_name = file_records)]
 #[diesel(check_for_backend(diesel::sqlite::Sqlite))]
 pub struct FileRecordDeleteForm {
@@ -69,9 +79,6 @@ pub struct FileRecordDeleteForm {
 
 impl PartialEq<CreateForm> for FileRecord {
     fn eq(&self, other: &CreateForm) -> bool {
-        self.path == other.path
-            && self.format == other.format
-            && self.size == other.size
-            && self.modified_at == other.modified_at
+        self.path == other.path && self.size == other.size && self.modified_at == other.modified_at
     }
 }

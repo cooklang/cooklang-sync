@@ -12,6 +12,7 @@ use tokio::time::Duration;
 
 use log::debug;
 
+use crate::chunker;
 use crate::connection::{get_connection, ConnectionPool};
 use crate::errors::SyncError;
 use crate::models::*;
@@ -71,13 +72,7 @@ fn filter_eligible(p: &Path) -> bool {
     if p.is_symlink() {
         return false;
     }
-
-    if let Some(ext) = p.extension() {
-        // TODO allow generic
-        ext == "cook" || ext == "conf" || ext == "yaml" || ext == "yml"
-    } else {
-        false
-    }
+    chunker::is_text(p) || chunker::is_binary(p)
 }
 
 fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles, SyncError> {
@@ -143,6 +138,7 @@ fn compare_records(from_db: DBFiles, from_fs: DiskFiles) -> (Vec<DeleteForm>, Ve
 
 fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm, SyncError> {
     let metadata = path.metadata()?;
+    // we assume that it was already checked and only one of these can be now
     let path = path.strip_prefix(base)?.to_string_lossy().into_owned();
     let size: i64 = metadata.len().try_into()?;
     let time = metadata.modified()?;
@@ -153,7 +149,6 @@ fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm, SyncError> 
         path,
         deleted: false,
         size,
-        format: "t".to_string(),
         modified_at,
     };
 
@@ -166,7 +161,6 @@ fn build_delete_form(record: &FileRecord) -> DeleteForm {
         jid: None,
         deleted: true,
         size: record.size,
-        format: record.format.to_string(),
         modified_at: record.modified_at,
     }
 }

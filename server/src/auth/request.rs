@@ -1,8 +1,8 @@
 use rocket::http::Status;
 use rocket::request::{self, FromRequest, Outcome, Request};
 
-use super::user::User;
 use super::token::decode_token;
+use super::user::User;
 
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for User {

@@ -1,5 +1,5 @@
-use std::env;
 use std::borrow::Cow;
+use std::env;
 use std::path::{Path, PathBuf};
 
 use rocket::request::FromParam;
@@ -15,7 +15,7 @@ impl ChunkId<'_> {
         let id_str = self.0.as_ref();
 
         if id_str.len() < 2 {
-            return Path::new(&root).join("null").join(id_str)
+            return Path::new(&root).join("null").join(id_str);
         }
 
         let first_char = &id_str[0..1];
@@ -30,7 +30,7 @@ impl ChunkId<'_> {
     /// Returns the path to the chunk in `upload/` corresponding to this ID.
     pub fn is_present(&self) -> bool {
         if self.0.as_ref() == "" {
-            return true
+            return true;
         }
 
         self.file_path().exists()

@@ -1,9 +1,7 @@
-## defaults for _all_ profiles
 [default]
 address = "0.0.0.0"
-limits = { bytes = "2MiB", data-form = "2MiB", file = "2MiB", form = "2MiB", json = "2MiB" }
-# bytes = 8KiB, data-form = 2MiB, file = 1MiB, form = 20MiB, json = 1MiB, msgpack = 1MiB, string = 8KiB
-## set only when compiled in debug mode, i.e, `cargo build`
+limits = { bytes = "2Mib", data-form = "2Mib", file = "2Mib"}
+
 [debug]
 port = 8000
 
@@ -13,4 +11,4 @@ timeout = 10
 
 
 [development]
-log = "trace"
+log_level = "debug"

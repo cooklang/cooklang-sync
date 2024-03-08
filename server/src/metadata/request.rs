@@ -10,7 +10,6 @@ pub(crate) struct CommitPayload<'r> {
     path: &'r str,
     deleted: bool,
     chunk_ids: &'r str,
-    format: &'r str,
 }
 
 impl From<Form<CommitPayload<'_>>> for NewFileRecord {
@@ -19,7 +18,6 @@ impl From<Form<CommitPayload<'_>>> for NewFileRecord {
             path: payload.path.into(),
             deleted: payload.deleted,
             chunk_ids: payload.chunk_ids.into(),
-            format: payload.format.into(),
         }
     }
 }

@@ -20,6 +20,8 @@ type Result<T, E = SyncError> = std::result::Result<T, E>;
 const INTERVAL_CHECK_DOWNLOAD_SEC: i32 = 307;
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 const NO_INTERNET_SLEEP_SEC: Duration = Duration::from_secs(61);
+// TODO should be in sync in multiple places
+const MAX_UPLOAD_SIZE: usize = 1_000_000;
 
 pub async fn run(
     pool: &ConnectionPool,
@@ -84,7 +86,7 @@ async fn check_upload(
             }
 
             let r = remote
-                .commit(&f.path, f.deleted, &chunk_ids.join(","), "t")
+                .commit(&f.path, f.deleted, &chunk_ids.join(","))
                 .await?;
 
             match r {
@@ -99,7 +101,7 @@ async fn check_upload(
                         size += data.len();
                         last.push((c.into(), data));
 
-                        if size > 10_000 {
+                        if size > MAX_UPLOAD_SIZE {
                             upload_payload.push(vec![]);
                             last = upload_payload.last_mut().unwrap();
                             size = 0;
@@ -110,7 +112,9 @@ async fn check_upload(
         }
 
         for batch in upload_payload {
-            remote.upload_batch(batch).await?;
+            if batch.len() > 0 {
+                remote.upload_batch(batch).await?;
+            }
         }
 
         // need to wait only if we didn't upload anything
@@ -201,7 +205,6 @@ fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::Create
         path: path.to_string(),
         deleted: false,
         size,
-        format: "t".to_string(),
         modified_at,
     };
 
@@ -217,7 +220,6 @@ fn build_delete_form(path: &str, base: &Path, jid: i32) -> models::DeleteForm {
         jid: Some(jid),
         deleted: true,
         size: 0,
-        format: "t".to_string(),
         modified_at: OffsetDateTime::now_utc(),
     }
 }

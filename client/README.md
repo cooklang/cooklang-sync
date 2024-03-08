@@ -117,14 +117,15 @@ Q:
 
 TODO
 ====
+- bundling of uploads/downloads
 - read-only
 - namespaces
 - proper error handling
 - report error on unexpeted cache behaviour
-- support of binary files
-    - by extension select text files, the rest is binary
-- bundling of uploads/downloads
 - don't need to throw unknown error in each non-200 response
+- remove clone
+- limit max file
+
 
 - extract to core shared datasctuctures
 - garbage collection on DB

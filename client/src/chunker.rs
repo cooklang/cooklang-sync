@@ -1,12 +1,15 @@
-use std::path::PathBuf;
-use tokio::fs::{self, create_dir_all, File};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
-
 use log::trace;
 use quick_cache::{sync::Cache, Weighter};
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
+use tokio::fs::{self, create_dir_all, File};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 
 use crate::errors::SyncError;
+
+const CHUNK_SIZE: usize = 1_024 * 1_024; // 1 MB
+const BINARY_HASH_SIZE: usize = 32;
+const TEXT_HASH_SIZE: usize = 10;
 
 pub struct Chunker {
     cache: InMemoryCache,
@@ -27,15 +30,47 @@ impl Chunker {
     }
 
     pub async fn hashify(&mut self, path: &str) -> Result<Vec<String>> {
+        let p = Path::new(path);
+
+        if is_text(p) {
+            self.hashify_text(path).await
+        } else if is_binary(p) {
+            self.hashify_binary(path).await
+        } else {
+            Err(SyncError::UnlistedFileFormat(path.to_string()))
+        }
+    }
+
+    async fn hashify_binary(&mut self, path: &str) -> Result<Vec<String>> {
+        let file = File::open(self.full_path(path)).await?;
+        let mut reader = BufReader::new(file);
+        let mut hashes = Vec::new();
+
+        let mut buffer = vec![0u8; CHUNK_SIZE];
+        loop {
+            let bytes_read = reader.read(&mut buffer).await?;
+            if bytes_read == 0 {
+                break;
+            }
+
+            let data = &buffer[..bytes_read].to_vec();
+            let hash = self.hash(data, BINARY_HASH_SIZE);
+            self.save_chunk(&hash, data.to_vec())?;
+            hashes.push(hash);
+        }
+
+        Ok(hashes)
+    }
+
+    async fn hashify_text(&mut self, path: &str) -> Result<Vec<String>> {
         let file = File::open(self.full_path(path)).await?;
         let mut reader = BufReader::new(file);
         let mut buffer = Vec::new();
         let mut hashes = Vec::new();
 
-        // TODO should work for binary too
         while reader.read_until(b'\n', &mut buffer).await? > 0 {
             let data: Vec<u8> = buffer.clone();
-            let hash = self.hash(&data);
+            let hash = self.hash(&data, TEXT_HASH_SIZE);
             self.save_chunk(&hash, data)?;
             hashes.push(hash);
 
@@ -46,7 +81,7 @@ impl Chunker {
         Ok(hashes)
     }
 
-    pub fn hash(&self, data: &Vec<u8>) -> String {
+    pub fn hash(&self, data: &Vec<u8>, size: usize) -> String {
         let mut hasher = Sha256::new();
 
         hasher.update(data);
@@ -54,7 +89,7 @@ impl Chunker {
         let result = hasher.finalize();
         let hex_string = format!("{:x}", result);
 
-        hex_string[0..10].to_string()
+        hex_string[0..size].to_string()
     }
 
     pub fn exists(&mut self, path: &str) -> bool {
@@ -144,6 +179,7 @@ impl InMemoryCache {
     }
 
     fn set(&mut self, chunk_hash: &str, content: Vec<u8>) -> Result<()> {
+        // trace!("setting hash {:?} data  {:?}", chunk_hash, content.len());
         self.cache.insert(chunk_hash.to_string(), content);
         Ok(())
     }
@@ -153,5 +189,25 @@ impl InMemoryCache {
             Some(_content) => true,
             None => false,
         }
+    }
+}
+
+pub fn is_binary(p: &Path) -> bool {
+    if let Some(ext) = p.extension() {
+        let ext = ext.to_ascii_lowercase();
+
+        ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "gif"
+    } else {
+        false
+    }
+}
+
+pub fn is_text(p: &Path) -> bool {
+    if let Some(ext) = p.extension() {
+        let ext = ext.to_ascii_lowercase();
+
+        ext == "cook" || ext == "conf" || ext == "yaml" || ext == "yml"
+    } else {
+        false
     }
 }

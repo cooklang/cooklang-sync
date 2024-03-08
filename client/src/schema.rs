@@ -6,7 +6,6 @@ diesel::table! {
         jid -> Nullable<Integer>,
         deleted -> Bool,
         path -> Text,
-        format -> Text,
         modified_at -> TimestamptzSqlite,
         size -> BigInt,
     }

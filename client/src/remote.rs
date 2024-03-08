@@ -5,18 +5,18 @@ use log::trace;
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest::{multipart, StatusCode};
+use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
 use crate::errors::SyncError;
 
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct ResponseFileRecord {
     pub id: i32,
     pub path: String,
     pub deleted: bool,
     pub chunk_ids: String,
-    pub format: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -29,16 +29,22 @@ pub struct Remote {
     api_endpoint: String,
     token: String,
     uuid: String,
-    client: reqwest::Client,
+    client: ClientWithMiddleware,
 }
 
 impl Remote {
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
+
+        let rc = reqwest::ClientBuilder::new().gzip(true).build().unwrap();
+        let client = ClientBuilder::new(rc)
+            // .with(OriginalHeadersMiddleware)
+            .build();
+
         Self {
             api_endpoint: api_endpoint.into(),
             uuid: Uuid::new_v4().into(),
             token: token.into(),
-            client: reqwest::Client::new(),
+            client,
         }
     }
 }
@@ -71,7 +77,7 @@ impl Remote {
     }
 
     pub async fn upload_batch(&self, chunks: Vec<(String, Vec<u8>)>) -> Result<()> {
-        trace!("uploading chunks {:?}", chunks);
+        trace!("uploading chunks {:?}", chunks.clone().into_iter().map(|(c, _)| c).collect::<Vec<String>>());
 
         let mut form = multipart::Form::new();
 
@@ -90,6 +96,7 @@ impl Remote {
         match response.status() {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            // TODO Don't need to error as it's sometimes fails??
             _ => Err(SyncError::Unknown),
         }
     }
@@ -158,10 +165,8 @@ impl Remote {
         match response.status() {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => {
-                // Don't need to error as it's expected to be cancelled from time to time
-                Ok(())
-            }
+            // Don't need to error as it's expected to be cancelled from time to time
+            _ => Ok(()),
         }
     }
 
@@ -170,12 +175,10 @@ impl Remote {
         path: &str,
         deleted: bool,
         chunk_ids: &str,
-        format: &str,
     ) -> Result<CommitResultStatus> {
         trace!("commit {:?}", path);
 
         let params = [
-            ("format", format),
             ("deleted", if deleted { "true" } else { "false" }),
             ("chunk_ids", chunk_ids),
             ("path", path),

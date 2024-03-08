@@ -125,6 +125,7 @@ TODO
 - don't need to throw unknown error in each non-200 response
 - remove clone
 - limit max file
+- configuration struct
 
 
 - extract to core shared datasctuctures

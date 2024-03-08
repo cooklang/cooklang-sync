@@ -79,6 +79,7 @@ impl Remote {
     pub async fn upload_batch(&self, chunks: Vec<(String, Vec<u8>)>) -> Result<()> {
         trace!("uploading chunks {:?}", chunks.clone().into_iter().map(|(c, _)| c).collect::<Vec<String>>());
 
+        // TODO make proper streaming
         let mut form = multipart::Form::new();
 
         for (chunk, content) in chunks {

@@ -7,7 +7,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, BufWrit
 
 use crate::errors::SyncError;
 
-const CHUNK_SIZE: usize = 1_024 * 1_024; // 1 MB
+const BINARY_CHUNK_SIZE: usize = 1_024 * 1_024; // 1 MB
 const BINARY_HASH_SIZE: usize = 32;
 const TEXT_HASH_SIZE: usize = 10;
 
@@ -45,8 +45,8 @@ impl Chunker {
         let file = File::open(self.full_path(path)).await?;
         let mut reader = BufReader::new(file);
         let mut hashes = Vec::new();
+        let mut buffer = vec![0u8; BINARY_CHUNK_SIZE];
 
-        let mut buffer = vec![0u8; CHUNK_SIZE];
         loop {
             let bytes_read = reader.read(&mut buffer).await?;
             if bytes_read == 0 {

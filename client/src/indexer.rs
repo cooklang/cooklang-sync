@@ -37,26 +37,7 @@ pub async fn run(
     mut updated_tx: Sender<IndexerUpdateEvent>,
 ) -> Result<(), SyncError> {
     loop {
-        debug!("interval scan");
-
-        // TODO should be smarter and don't stop the loop,
-        // unless repeating errors
-        let from_db = get_file_records_from_registry(pool)?;
-        let from_fs = get_file_records_from_disk(storage_path)?;
-
-        let (to_remove, to_add) = compare_records(from_db, from_fs);
-
-        if !to_remove.is_empty() || !to_add.is_empty() {
-            let conn = &mut get_connection(pool)?;
-
-            if !to_remove.is_empty() {
-                registry::delete(conn, &to_remove)?;
-            }
-
-            if !to_add.is_empty() {
-                registry::create(conn, &to_add)?;
-            }
-
+        if check_index_once(pool, storage_path)? {
             updated_tx.send(IndexerUpdateEvent::Updated).await?;
         }
 
@@ -64,6 +45,31 @@ pub async fn run(
             _ = tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC) => {},
             Some(_) = local_file_update_rx.next() => {},
         };
+    }
+}
+
+pub fn check_index_once(pool: &ConnectionPool, storage_path: &Path) -> Result<bool, SyncError> {
+    debug!("interval scan");
+
+    let from_db = get_file_records_from_registry(pool)?;
+    let from_fs = get_file_records_from_disk(storage_path)?;
+
+    let (to_remove, to_add) = compare_records(from_db, from_fs);
+
+    if !to_remove.is_empty() || !to_add.is_empty() {
+        let conn = &mut get_connection(pool)?;
+
+        if !to_remove.is_empty() {
+            registry::delete(conn, &to_remove)?;
+        }
+
+        if !to_add.is_empty() {
+            registry::create(conn, &to_add)?;
+        }
+
+        Ok(true)
+    } else {
+        Ok(false)
     }
 }
 

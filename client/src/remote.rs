@@ -34,7 +34,6 @@ pub struct Remote {
 
 impl Remote {
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
-
         let rc = reqwest::ClientBuilder::new().gzip(true).build().unwrap();
         let client = ClientBuilder::new(rc)
             // .with(OriginalHeadersMiddleware)
@@ -77,7 +76,14 @@ impl Remote {
     }
 
     pub async fn upload_batch(&self, chunks: Vec<(String, Vec<u8>)>) -> Result<()> {
-        trace!("uploading chunks {:?}", chunks.clone().into_iter().map(|(c, _)| c).collect::<Vec<String>>());
+        trace!(
+            "uploading chunks {:?}",
+            chunks
+                .clone()
+                .into_iter()
+                .map(|(c, _)| c)
+                .collect::<Vec<String>>()
+        );
 
         // TODO make proper streaming
         let mut form = multipart::Form::new();

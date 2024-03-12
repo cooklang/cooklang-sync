@@ -34,7 +34,7 @@ pub async fn run(
     let chunker = Arc::new(Mutex::new(chunker));
 
     if read_only {
-        let _ = try_join!(check_download(
+        let _ = try_join!(download_loop(
             pool,
             Arc::clone(&chunker),
             remote,
@@ -42,106 +42,27 @@ pub async fn run(
         ))?;
     } else {
         let _ = try_join!(
-            check_upload(
+            download_loop(pool, Arc::clone(&chunker), remote, storage_path),
+            upload_loop(
                 pool,
                 Arc::clone(&chunker),
                 remote,
                 local_registry_updated_rx
             ),
-            check_download(pool, Arc::clone(&chunker), remote, storage_path)
         )?;
     }
 
     Ok(())
 }
 
-async fn check_upload(
-    pool: &ConnectionPool,
-    chunker: Arc<Mutex<&mut Chunker>>,
-    remote: &Remote,
-    mut local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
-) -> Result<()> {
-    // wait for indexer to work first
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    loop {
-        debug!("upload scan");
-
-        let conn = &mut get_connection(pool)?;
-
-        let to_upload = registry::updated_locally(conn)?;
-
-        let mut upload_payload: Vec<Vec<(String, Vec<u8>)>> = vec![vec![]];
-        let mut size = 0;
-        let mut last = upload_payload.last_mut().unwrap();
-
-        for f in &to_upload {
-            trace!("to upload {:?}", f);
-            let mut chunker = chunker.lock().await;
-            let mut chunk_ids = vec![String::from("")];
-
-            if !f.deleted {
-                // Also warms up the cache
-                chunk_ids = chunker.hashify(&f.path).await?;
-            }
-
-            let r = remote
-                .commit(&f.path, f.deleted, &chunk_ids.join(","))
-                .await?;
-
-            match r {
-                CommitResultStatus::Success(jid) => {
-                    trace!("commit success");
-                    registry::update_jid(conn, f, jid)?;
-                }
-                CommitResultStatus::NeedChunks(chunks) => {
-                    trace!("need chunks");
-                    for c in chunks.split(',') {
-                        let data = chunker.read_chunk(c)?;
-                        size += data.len();
-                        last.push((c.into(), data));
-
-                        if size > MAX_UPLOAD_SIZE {
-                            upload_payload.push(vec![]);
-                            last = upload_payload.last_mut().unwrap();
-                            size = 0;
-                        }
-                    }
-                }
-            }
-        }
-
-        for batch in upload_payload {
-            if batch.len() > 0 {
-                remote.upload_batch(batch).await?;
-            }
-        }
-
-        // need to wait only if we didn't upload anything
-        // otherwise it should re-run immideately
-        if to_upload.is_empty() {
-            // TODO test that it doesn't cancle stream
-            tokio::select! {
-                _ = tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC) => {},
-                Some(_) = local_registry_updated_rx.next() => {},
-            };
-        }
-    }
-}
-
-async fn check_download(
+async fn download_loop(
     pool: &ConnectionPool,
     chunker: Arc<Mutex<&mut Chunker>>,
     remote: &Remote,
     storage_path: &Path,
 ) -> Result<()> {
     loop {
-        debug!("download scan");
-
-        let conn = &mut get_connection(pool)?;
-
-        let latest_local = registry::latest_jid(conn).unwrap_or(0);
-        let to_download = match remote.list(latest_local).await {
+        match check_download_once(pool, Arc::clone(&chunker), remote, storage_path).await {
             Ok(v) => v,
             Err(SyncError::Unauthorized) => return Err(SyncError::Unauthorized),
             Err(_) => {
@@ -153,43 +74,144 @@ async fn check_download(
             }
         };
 
-        for d in &to_download {
-            trace!("to download {:?}", d);
-
-            let mut chunker = chunker.lock().await;
-
-            if d.deleted {
-                let form = build_delete_form(&d.path, storage_path, d.id);
-                // TODO atomic?
-                registry::delete(conn, &vec![form])?;
-                chunker.delete(&d.path).await?;
-            } else {
-                let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
-
-                // Warm-up cache to include chunks from an old file
-                if chunker.exists(&d.path) {
-                    chunker.hashify(&d.path).await?;
-                }
-
-                for c in &chunks {
-                    if !chunker.check_chunk(c)? {
-                        chunker.save_chunk(c, remote.download(c).await?)?;
-                    }
-                }
-
-                // TODO atomic? store in tmp first and then move?
-                // TODO should be after we create record in db
-                if let Err(e) = chunker.save(&d.path, chunks).await {
-                    error!("{:?}", e);
-                }
-
-                let form = build_file_record(&d.path, storage_path, d.id)?;
-                registry::create(conn, &vec![form])?;
-            }
-        }
-
         remote.poll(INTERVAL_CHECK_DOWNLOAD_SEC).await?;
     }
+}
+
+pub async fn upload_loop(
+    pool: &ConnectionPool,
+    chunker: Arc<Mutex<&mut Chunker>>,
+    remote: &Remote,
+    mut local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
+) -> Result<()> {
+    // wait for indexer to work first
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    loop {
+        // need to wait only if we didn't upload anything
+        // otherwise it should re-run immideately
+        if check_upload_once(pool, Arc::clone(&chunker), remote).await? {
+            // TODO test that it doesn't cancle stream
+            tokio::select! {
+                _ = tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC) => {},
+                Some(_) = local_registry_updated_rx.next() => {},
+            };
+        }
+    }
+}
+
+pub async fn check_upload_once(
+    pool: &ConnectionPool,
+    chunker: Arc<Mutex<&mut Chunker>>,
+    remote: &Remote,
+) -> Result<bool> {
+    debug!("upload scan");
+
+    let conn = &mut get_connection(pool)?;
+    let to_upload = registry::updated_locally(conn)?;
+
+    let mut upload_payload: Vec<Vec<(String, Vec<u8>)>> = vec![vec![]];
+    let mut size = 0;
+    let mut last = upload_payload.last_mut().unwrap();
+    let mut all_commited = true;
+
+    for f in &to_upload {
+        trace!("to upload {:?}", f);
+        let mut chunker = chunker.lock().await;
+        let mut chunk_ids = vec![String::from("")];
+
+        if !f.deleted {
+            // Also warms up the cache
+            chunk_ids = chunker.hashify(&f.path).await?;
+        }
+
+        let r = remote
+            .commit(&f.path, f.deleted, &chunk_ids.join(","))
+            .await?;
+
+        match r {
+            CommitResultStatus::Success(jid) => {
+                trace!("commit success");
+                registry::update_jid(conn, f, jid)?;
+            }
+            CommitResultStatus::NeedChunks(chunks) => {
+                trace!("need chunks");
+
+                all_commited = false;
+
+                for c in chunks.split(',') {
+                    let data = chunker.read_chunk(c)?;
+                    size += data.len();
+                    last.push((c.into(), data));
+
+                    if size > MAX_UPLOAD_SIZE {
+                        upload_payload.push(vec![]);
+                        last = upload_payload.last_mut().unwrap();
+                        size = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    for batch in upload_payload {
+        if !batch.is_empty() {
+            remote.upload_batch(batch).await?;
+        }
+    }
+
+    Ok(all_commited)
+}
+
+pub async fn check_download_once(
+    pool: &ConnectionPool,
+    chunker: Arc<Mutex<&mut Chunker>>,
+    remote: &Remote,
+    storage_path: &Path,
+) -> Result<bool> {
+    debug!("download scan");
+
+    let conn = &mut get_connection(pool)?;
+
+    let latest_local = registry::latest_jid(conn).unwrap_or(0);
+    let to_download = remote.list(latest_local).await?;
+
+    for d in &to_download {
+        trace!("to download {:?}", d);
+
+        let mut chunker = chunker.lock().await;
+
+        if d.deleted {
+            let form = build_delete_form(&d.path, storage_path, d.id);
+            // TODO atomic?
+            registry::delete(conn, &vec![form])?;
+            chunker.delete(&d.path).await?;
+        } else {
+            let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
+
+            // Warm-up cache to include chunks from an old file
+            if chunker.exists(&d.path) {
+                chunker.hashify(&d.path).await?;
+            }
+
+            for c in &chunks {
+                if !chunker.check_chunk(c)? {
+                    chunker.save_chunk(c, remote.download(c).await?)?;
+                }
+            }
+
+            // TODO atomic? store in tmp first and then move?
+            // TODO should be after we create record in db
+            if let Err(e) = chunker.save(&d.path, chunks).await {
+                error!("{:?}", e);
+            }
+
+            let form = build_file_record(&d.path, storage_path, d.id)?;
+            registry::create(conn, &vec![form])?;
+        }
+    }
+
+    Ok(!to_download.is_empty())
 }
 
 fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm, SyncError> {

@@ -1,5 +1,4 @@
 [default]
-address = "0.0.0.0"
 limits = { bytes = "2Mib", data-form = "2Mib", file = "2Mib"}
 
 [debug]

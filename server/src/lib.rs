@@ -2,11 +2,11 @@
 extern crate rocket;
 extern crate diesel;
 
+pub mod chunks;
+pub mod metadata;
 mod auth;
 mod chunk_id;
-mod chunks;
 mod db;
-mod metadata;
 mod models;
 mod schema;
 

@@ -9,11 +9,11 @@ const TOKEN_EXPIRATION_DAYS: u64 = 100;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub uid: u64, // subject (who the token refers to)
+    pub uid: i32, // subject (who the token refers to)
     exp: usize,   // expiry date
 }
 
-pub fn create_token(user_id: u64) -> String {
+pub fn create_token(user_id: i32) -> String {
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")

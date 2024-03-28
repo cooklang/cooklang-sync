@@ -1,3 +1,3 @@
 pub struct User {
-    pub id: u64,
+    pub id: i32,
 }

@@ -12,16 +12,6 @@ pub(crate) struct CommitPayload<'r> {
     chunk_ids: &'r str,
 }
 
-impl From<Form<CommitPayload<'_>>> for NewFileRecord {
-    fn from(payload: Form<CommitPayload<'_>>) -> Self {
-        NewFileRecord {
-            path: payload.path.into(),
-            deleted: payload.deleted,
-            chunk_ids: payload.chunk_ids.into(),
-        }
-    }
-}
-
 impl<'a> CommitPayload<'a> {
     pub(crate) fn non_local_chunks(&self) -> Vec<ChunkId> {
         let desired: Vec<&str> = self.chunk_ids.split(',').collect();
@@ -31,5 +21,16 @@ impl<'a> CommitPayload<'a> {
             .map(|c| ChunkId(std::borrow::Cow::Borrowed(c)))
             .filter(|c| !c.is_present())
             .collect()
+    }
+}
+
+impl NewFileRecord {
+    pub(crate) fn from_payload_and_user_id(payload: Form<CommitPayload<'_>>, user_id: i32) -> Self {
+        NewFileRecord {
+            path: payload.path.into(),
+            deleted: payload.deleted,
+            chunk_ids: payload.chunk_ids.into(),
+            user_id,
+        }
     }
 }

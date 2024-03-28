@@ -26,7 +26,7 @@ type Result<T, E = Debug<diesel::result::Error>> = std::result::Result<T, E>;
 // if present all insert into db path and chunk hashes and return back a new jid
 #[post("/commit?<uuid>", data = "<commit_payload>")]
 async fn commit(
-    _user: User,
+    user: User,
     clients: &State<Mutex<ActiveClients>>,
     db: Db,
     uuid: String,
@@ -36,7 +36,7 @@ async fn commit(
 
     match to_be_uploaded.is_empty() {
         true => {
-            let r: NewFileRecord = commit_payload.into();
+            let r = NewFileRecord::from_payload_and_user_id(commit_payload, user.id);
             let id: i32 = db.run(move |conn| insert_new_record(conn, r)).await?;
 
             clients.lock().unwrap().notify(uuid);
@@ -58,8 +58,8 @@ async fn commit(
 
 // return back array of jid, path, hashes for all jid since requested
 #[get("/list?<jid>")]
-async fn list(db: Db, _user: User, jid: i32) -> Result<Json<Vec<FileRecord>>> {
-    let records = db.run(move |conn| db_list(conn, jid)).await?;
+async fn list(db: Db, user: User, jid: i32) -> Result<Json<Vec<FileRecord>>> {
+    let records = db.run(move |conn| db_list(conn, user.id, jid)).await?;
 
     Ok(Json(records))
 }

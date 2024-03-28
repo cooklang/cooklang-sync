@@ -62,6 +62,7 @@ async fn upload_chunks(
 
 /// Downloads chunk from a storage
 // TODO batch download
+// TODO does it need to check that user can access chunk?
 #[get("/<id>")]
 async fn retrieve(_user: User, id: ChunkId<'_>) -> Option<RawText<File>> {
     if id == EMPTY_CHUNK_ID {

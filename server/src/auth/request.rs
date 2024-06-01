@@ -9,7 +9,7 @@ impl<'r> FromRequest<'r> for User {
     type Error = ();
 
     async fn from_request(request: &'r Request<'_>) -> request::Outcome<Self, Self::Error> {
-        println!("{:?}", crate::auth::token::create_token(99));
+        // println!("{:?}", crate::auth::token::create_token(99));
 
         if let Some(auth_header) = request.headers().get_one("Authorization") {
             if let Some(token) = auth_header.strip_prefix("Bearer ") {

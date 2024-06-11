@@ -2,6 +2,8 @@
 
 Based on desings from Dropbox https://dropbox.tech/infrastructure/streaming-file-synchronization.
 
+Suitable for syncing text files and not large (<10MB) binary files.
+
 ## Roadmap
 
 - Not even alpha
@@ -13,7 +15,8 @@ Based on desings from Dropbox https://dropbox.tech/infrastructure/streaming-file
 - Read only files
 - Export metrics
 - Security audit and hardening
-…
+- Streaming
+- PG as DB for server
 
 ## Running
 

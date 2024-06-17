@@ -414,6 +414,7 @@ dependencies = [
  "mime",
  "multer",
  "rocket",
+ "rocket-multipart",
  "rocket_sync_db_pools",
  "rusqlite",
  "serde",
@@ -1867,6 +1868,16 @@ dependencies = [
  "ubyte",
  "version_check",
  "yansi",
+]
+
+[[package]]
+name = "rocket-multipart"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac5c4994e208dc953a6d5f3764101fc3eec5994759985bd8c978fba59193b1fa"
+dependencies = [
+ "rand",
+ "rocket",
 ]
 
 [[package]]

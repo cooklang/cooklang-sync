@@ -126,6 +126,7 @@ TODO
 - remove clone
 - limit max file
 - configuration struct
+- pull changes first or reindex locally first? research possible conflict scenarios
 
 
 - extract to core shared datasctuctures

@@ -5,9 +5,12 @@ use rocket::response::content::RawText;
 use rocket::tokio::fs::{self, create_dir_all};
 use rocket::tokio::io::{AsyncWriteExt};
 
+use rocket::async_stream::stream;
+
 use rocket::response::stream::{ReaderStream};
 use rocket::futures::stream::{StreamExt};
-
+use rocket::http::{ContentType, Status};
+use rocket::futures::Stream;
 use rocket::tokio::fs::File;
 
 use std::path::PathBuf;
@@ -127,24 +130,30 @@ async fn retrieve(_user: User, id: ChunkId<'_>) -> Option<RawText<File>> {
 
 use rocket::form::Form;
 
+use rocket_multipart::{MultipartStream, MultipartSection};
+use tokio::io::AsyncReadExt;
+
 
 #[derive(FromForm, Debug)]
 struct ChunkIds<'a>(Vec<ChunkId<'a>>);
 
 #[post("/download", format = "application/x-www-form-urlencoded", data = "<chunk_ids>")]
-async fn download_chunks(chunk_ids: Form<ChunkIds<'_>>) -> ReaderStream![File + '_] {
+async fn download_chunks(chunk_ids: Form<ChunkIds<'_>>) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
 
-    ReaderStream! {
-        let paths: &Vec<PathBuf> = &chunk_ids.0.iter().map(|p| p.file_path()).collect();
+    MultipartStream::new_random(
+            stream! {
+                for chunk_id in &chunk_ids.0 {
+                    let file = File::open(chunk_id.file_path()).await.expect("jojo");
 
-        for path in paths {
-            if let Ok(file) = File::open(path).await {
-                yield file;
-            }
-        }
-    }
+                    yield MultipartSection {
+                        content_type: Some(ContentType::Text),
+                        content_encoding: None,
+                        content: Box::pin(file)
+                    };
+                }
+            },
+        )
 }
-
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Chunk Server Stage", |rocket| async {

@@ -5,6 +5,8 @@ authors = ["Alexey Dubovskoy <alexey@cooklang.org>"]
 edition = "2021"
 description = "A server library for cooklang-sync"
 license = "MPL-2.0"
+repository = "https://github.com/cooklang/cooklang-sync"
+keywords = ["file-sync", "sync"]
 
 [[bin]]
 path = "src/main.rs"

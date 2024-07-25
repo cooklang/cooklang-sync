@@ -1,7 +1,8 @@
-use async_notify::Notify;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
+
+use async_notify::Notify;
 
 pub(crate) struct Client {
     uuid: String,

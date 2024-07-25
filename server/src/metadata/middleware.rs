@@ -2,9 +2,13 @@ use rocket::{Build, Rocket};
 
 use diesel_migrations::{embed_migrations, EmbeddedMigrations};
 
-use crate::db::Db;
+use super::db::Db;
 
-const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
+// TODO should be really in the same folder so we don't forget to add both migrations
+#[cfg(feature = "database_sqlite")]
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/metadata/migrations/sqlite");
+#[cfg(feature = "database_postgres")]
+const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/metadata/migrations/postgres");
 
 pub(crate) async fn run_migrations(rocket: Rocket<Build>) -> Rocket<Build> {
     use diesel_migrations::MigrationHarness;

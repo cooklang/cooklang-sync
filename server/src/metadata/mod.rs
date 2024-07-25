@@ -9,13 +9,16 @@ use std::time::Duration;
 
 use crate::auth::user::User;
 
-use crate::db::{insert_new_record, list as db_list, Db};
-use crate::models::{FileRecord, NewFileRecord};
-
 mod middleware;
 mod notification;
 mod request;
 mod response;
+mod db;
+mod models;
+mod schema;
+
+use db::{insert_new_record, list as db_list, Db};
+use models::{FileRecord, NewFileRecord};
 
 use notification::{ActiveClients, Client};
 
@@ -96,7 +99,7 @@ async fn poll(
 }
 
 pub fn stage() -> AdHoc {
-    AdHoc::on_ignite("Diesel SQLite Stage", |rocket| async {
+    AdHoc::on_ignite("Diesel DB Stage", |rocket| async {
         let clients = notification::init();
 
         rocket

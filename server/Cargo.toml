@@ -15,10 +15,10 @@ name = "server"
 
 [dependencies]
 rocket = { version = "0.5.0", features = ["json"] }
-rocket_sync_db_pools = { version = "0.1.0-rc.2", features = [ "diesel_sqlite_pool" ] }
-diesel = { version = "2", features = ["returning_clauses_for_sqlite_3_35", "sqlite", "r2d2"] }
+rocket_sync_db_pools = { version = "0.1.0-rc.2", optional = true }
+diesel = { version = "2", default-features = false, optional = true, features = ["r2d2"] }
 diesel_migrations = "2"
-rusqlite = { version = "0.30.0", features = ["bundled"] }
+rusqlite = { version = "0.30.0", optional = true, features = ["bundled"] }
 async-notify = "0.3.0"
 tokio = { version = "1.36.0", features = ["time"] }
 multer = "3.0.0"
@@ -29,3 +29,18 @@ serde_json = "1.0"
 mime = "0.3.17"
 futures-core = "0.3.30"
 rocket-multipart = "0.1.0"
+
+
+[features]
+default = ["database_sqlite"]
+
+database_sqlite = [
+  "diesel/sqlite",
+  "diesel/returning_clauses_for_sqlite_3_35",
+  "rusqlite/bundled",
+  "rocket_sync_db_pools/diesel_sqlite_pool"
+]
+database_postgres = [
+  "diesel/postgres",
+  "rocket_sync_db_pools/diesel_postgres_pool"
+]

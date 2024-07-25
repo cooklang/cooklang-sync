@@ -3,7 +3,7 @@ use std::convert::From;
 use rocket::form::{Form, FromForm};
 
 use crate::chunk_id::ChunkId;
-use crate::models::NewFileRecord;
+use super::models::NewFileRecord;
 
 #[derive(Debug, FromForm)]
 pub(crate) struct CommitPayload<'r> {

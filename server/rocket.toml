@@ -1,13 +1,7 @@
 [default]
 limits = { bytes = "2Mib", data-form = "2Mib", file = "2Mib"}
 
-[debug]
-port = 8000
-
-[default.databases.diesel]
+[default.databases.metadata]
 url = "db/server.sqlite3"
 timeout = 10
 
-
-[development]
-log_level = "debug"

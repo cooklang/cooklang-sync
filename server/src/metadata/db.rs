@@ -12,7 +12,7 @@ type DbConnection = diesel::SqliteConnection;
 type DbConnection = diesel::PgConnection;
 
 
-#[database("diesel")]
+#[database("metadata")]
 pub(crate) struct Db(DbConnection);
 
 #[cfg(all(feature = "database_postgres"))]

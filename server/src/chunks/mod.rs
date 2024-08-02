@@ -138,7 +138,7 @@ use rocket_multipart::{MultipartStream, MultipartSection};
 struct ChunkIds<'a>(Vec<ChunkId<'a>>);
 
 #[post("/download", format = "application/x-www-form-urlencoded", data = "<chunk_ids>")]
-async fn download_chunks(chunk_ids: Form<ChunkIds<'_>>) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
+async fn download_chunks(_user: User, chunk_ids: Form<ChunkIds<'_>>) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
 
     MultipartStream::new_random(
             stream! {

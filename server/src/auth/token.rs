@@ -13,7 +13,7 @@ pub struct Claims {
     exp: usize,   // expiry date
 }
 
-pub fn create_token(user_id: i32) -> String {
+pub fn create_token(user_id: i32, secret: &[u8]) -> String {
     let expiration = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards")
@@ -28,15 +28,15 @@ pub fn create_token(user_id: i32) -> String {
     encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret("secret".as_ref()),
+        &EncodingKey::from_secret(secret),
     )
     .unwrap()
 }
 
-pub fn decode_token(token: &str) -> Result<Claims, ()> {
+pub fn decode_token(token: &str, secret: &[u8]) -> Result<Claims, ()> {
     match decode::<Claims>(
         token,
-        &DecodingKey::from_secret("secret".as_ref()),
+        &DecodingKey::from_secret(secret),
         &Validation::new(Algorithm::HS256),
     ) {
         Ok(c) => Ok(c.claims),

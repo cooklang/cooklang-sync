@@ -11,7 +11,6 @@ type DbConnection = diesel::SqliteConnection;
 #[cfg(feature = "database_postgres")]
 type DbConnection = diesel::PgConnection;
 
-
 #[database("metadata")]
 pub(crate) struct Db(DbConnection);
 
@@ -22,7 +21,6 @@ pub type DieselBackend = diesel::pg::Pg;
 #[cfg(all(feature = "database_sqlite"))]
 #[allow(dead_code)]
 pub type DieselBackend = diesel::sqlite::Sqlite;
-
 
 type Result<T, E = diesel::result::Error> = std::result::Result<T, E>;
 

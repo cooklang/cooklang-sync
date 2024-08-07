@@ -30,6 +30,7 @@ pub struct FileRecord {
     pub path: String,
     pub size: i64,
     pub modified_at: OffsetDateTime,
+    pub namespace_id: i32,
 }
 
 #[derive(Insertable, Debug, Clone)]
@@ -41,6 +42,7 @@ pub struct CreateForm {
     pub deleted: bool,
     pub size: i64,
     pub modified_at: OffsetDateTime,
+    pub namespace_id: i32,
 }
 
 #[derive(Insertable, Debug, Clone)]
@@ -52,6 +54,7 @@ pub struct DeleteForm {
     pub size: i64,
     pub modified_at: OffsetDateTime,
     pub deleted: bool,
+    pub namespace_id: i32,
 }
 
 #[derive(AsChangeset, Debug, Clone)]
@@ -75,6 +78,7 @@ pub struct FileRecordNonDeletedFilterForm {
 pub struct FileRecordDeleteForm {
     pub id: i32,
     pub deleted: bool,
+    pub namespace_id: i32,
 }
 
 impl PartialEq<CreateForm> for FileRecord {

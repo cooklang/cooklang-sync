@@ -7,10 +7,10 @@ compile_error!(
 extern crate rocket;
 extern crate diesel;
 
-pub mod chunks;
-pub mod metadata;
 mod auth;
 mod chunk_id;
+pub mod chunks;
+pub mod metadata;
 
 pub fn create_server() -> rocket::Rocket<rocket::Build> {
     rocket::build()

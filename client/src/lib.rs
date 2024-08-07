@@ -1,16 +1,7 @@
-pub mod chunker;
-pub mod connection;
-pub mod errors;
-pub mod file_watcher;
-pub mod indexer;
-pub mod models;
-pub mod registry;
-pub mod remote;
-pub mod schema;
-pub mod syncer;
-
 use futures::{channel::mpsc::channel, try_join};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, TokenData, Validation};
 use notify::RecursiveMode;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -26,6 +17,36 @@ use crate::syncer::{check_download_once, check_upload_once};
 const CHANNEL_SIZE: usize = 100;
 const INMEMORY_CACHE_MAX_REC: usize = 100000;
 const INMEMORY_CACHE_MAX_MEM: u64 = 100_000_000_000;
+const DUMMY_SECRET: &[u8] = b"dummy_secret";
+
+pub mod chunker;
+pub mod connection;
+pub mod errors;
+pub mod file_watcher;
+pub mod indexer;
+pub mod models;
+pub mod registry;
+pub mod remote;
+pub mod schema;
+pub mod syncer;
+
+pub fn extract_uid_from_jwt(token: &str) -> i32 {
+    let mut validation = Validation::new(Algorithm::HS256);
+
+    // Disabling signature validation because we don't know real secret
+    validation.insecure_disable_signature_validation();
+
+    #[derive(Debug, Serialize, Deserialize)]
+    struct Claims {
+        uid: i32,
+    }
+
+    let token_data: TokenData<Claims> =
+        decode::<Claims>(token, &DecodingKey::from_secret(DUMMY_SECRET), &validation)
+            .expect("Failed to decode token");
+
+    token_data.claims.uid
+}
 
 uniffi::setup_scaffolding!();
 
@@ -37,6 +58,7 @@ pub fn run(
     db_file_path: &str,
     api_endpoint: &str,
     remote_token: &str,
+    namespace_id: i32,
     download_only: bool,
 ) -> Result<(), errors::SyncError> {
     Runtime::new()?.block_on(run_async(
@@ -44,6 +66,7 @@ pub fn run(
         db_file_path,
         api_endpoint,
         remote_token,
+        namespace_id,
         download_only,
     ))?;
 
@@ -74,6 +97,7 @@ pub fn run_download_once(
     db_file_path: &str,
     api_endpoint: &str,
     remote_token: &str,
+    namespace_id: i32,
 ) -> Result<(), errors::SyncError> {
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new(INMEMORY_CACHE_MAX_REC, INMEMORY_CACHE_MAX_MEM);
@@ -89,6 +113,7 @@ pub fn run_download_once(
         Arc::clone(&chunker),
         remote,
         storage_dir,
+        namespace_id,
     ))?;
 
     Ok(())
@@ -103,6 +128,7 @@ pub fn run_upload_once(
     db_file_path: &str,
     api_endpoint: &str,
     remote_token: &str,
+    namespace_id: i32,
 ) -> Result<(), errors::SyncError> {
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new(INMEMORY_CACHE_MAX_REC, INMEMORY_CACHE_MAX_MEM);
@@ -113,14 +139,24 @@ pub fn run_upload_once(
     let pool = connection::get_connection_pool(db_file_path)?;
     debug!("Started connection pool for {:?}", db_file_path);
 
-    check_index_once(&pool, storage_dir)?;
+    check_index_once(&pool, storage_dir, namespace_id)?;
 
     let runtime = Runtime::new()?;
 
     // It requires first pass to upload missing chunks and second to
     // commit and update `jid` to local records.
-    if !runtime.block_on(check_upload_once(&pool, Arc::clone(&chunker), remote))? {
-        runtime.block_on(check_upload_once(&pool, Arc::clone(&chunker), remote))?;
+    if !runtime.block_on(check_upload_once(
+        &pool,
+        Arc::clone(&chunker),
+        remote,
+        namespace_id,
+    ))? {
+        runtime.block_on(check_upload_once(
+            &pool,
+            Arc::clone(&chunker),
+            remote,
+            namespace_id,
+        ))?;
     }
 
     Ok(())
@@ -132,6 +168,7 @@ async fn run_async(
     db_file_path: &str,
     api_endpoint: &str,
     remote_token: &str,
+    namespace_id: i32,
     download_only: bool,
 ) -> Result<(), errors::SyncError> {
     let (mut debouncer, local_file_update_rx) = async_watcher()?;
@@ -155,6 +192,7 @@ async fn run_async(
     let indexer = indexer::run(
         &pool,
         storage_dir,
+        namespace_id,
         local_file_update_rx,
         local_registry_updated_tx,
     );
@@ -163,6 +201,7 @@ async fn run_async(
     let syncer = syncer::run(
         &pool,
         storage_dir,
+        namespace_id,
         chunker,
         remote,
         local_registry_updated_rx,

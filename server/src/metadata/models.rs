@@ -1,8 +1,8 @@
 use diesel::prelude::*;
 use rocket::serde::{Deserialize, Serialize};
 
-use super::schema::file_records;
 use super::db::DieselBackend;
+use super::schema::file_records;
 
 #[derive(Queryable, Selectable, Identifiable, Deserialize, Serialize, Debug)]
 #[diesel(table_name = file_records)]

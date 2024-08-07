@@ -3,17 +3,14 @@ use rocket::data::{Data, Limits};
 use rocket::fairing::AdHoc;
 use rocket::response::content::RawText;
 use rocket::tokio::fs::{self, create_dir_all};
-use rocket::tokio::io::{AsyncWriteExt};
+use rocket::tokio::io::AsyncWriteExt;
 
 use rocket::async_stream::stream;
 
-
-use rocket::futures::stream::{StreamExt};
-use rocket::http::{ContentType};
+use rocket::futures::stream::StreamExt;
 use rocket::futures::Stream;
+use rocket::http::ContentType;
 use rocket::tokio::fs::File;
-
-
 
 use crate::auth::user::User;
 use crate::chunk_id::ChunkId;
@@ -69,7 +66,6 @@ async fn upload_chunks_deprecated(
 
     Ok(())
 }
-
 
 #[post("/upload", format = "multipart/form-data", data = "<upload>")]
 async fn upload_chunks(
@@ -130,33 +126,42 @@ async fn retrieve(_user: User, id: ChunkId<'_>) -> Option<RawText<File>> {
 
 use rocket::form::Form;
 
-use rocket_multipart::{MultipartStream, MultipartSection};
-
-
+use rocket_multipart::{MultipartSection, MultipartStream};
 
 #[derive(FromForm, Debug)]
 struct ChunkIds<'a>(Vec<ChunkId<'a>>);
 
-#[post("/download", format = "application/x-www-form-urlencoded", data = "<chunk_ids>")]
-async fn download_chunks(_user: User, chunk_ids: Form<ChunkIds<'_>>) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
+#[post(
+    "/download",
+    format = "application/x-www-form-urlencoded",
+    data = "<chunk_ids>"
+)]
+async fn download_chunks(
+    chunk_ids: Form<ChunkIds<'_>>,
+) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
+    MultipartStream::new_random(stream! {
+        for chunk_id in &chunk_ids.0 {
+            let file = File::open(chunk_id.file_path()).await.expect("file present");
 
-    MultipartStream::new_random(
-            stream! {
-                for chunk_id in &chunk_ids.0 {
-                    let file = File::open(chunk_id.file_path()).await.expect("jojo");
-
-                    yield MultipartSection {
-                        content_type: Some(ContentType::Text),
-                        content_encoding: None,
-                        content: Box::pin(file)
-                    };
-                }
-            },
-        )
+            yield MultipartSection {
+                content_type: Some(ContentType::Text),
+                content_encoding: None,
+                content: Box::pin(file)
+            };
+        }
+    })
 }
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Chunk Server Stage", |rocket| async {
-        rocket.mount("/chunks", routes![upload_chunks, upload_chunks_deprecated, retrieve, download_chunks])
+        rocket.mount(
+            "/chunks",
+            routes![
+                upload_chunks,
+                upload_chunks_deprecated,
+                retrieve,
+                download_chunks
+            ],
+        )
     })
 }

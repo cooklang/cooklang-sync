@@ -1,15 +1,11 @@
-diff --git a/src/schema.rs b/src/schema.rs
-index 57e9dc0..d223ff5 100644
---- a/src/schema.rs
-+++ b/src/schema.rs
-@@ -3,9 +3,9 @@ diesel::table! {
-     file_records (id) {
-         id -> Integer,
+--- a/client/src/schema.rs
++++ b/client/src/schema.rs
+@@ -6,7 +6,7 @@ diesel::table! {
          jid -> Nullable<Integer>,
          deleted -> Bool,
          path -> Text,
 -        modified_at -> Timestamp,
 +        modified_at -> TimestamptzSqlite,
          size -> BigInt,
+         namespace_id -> Integer,
      }
- }

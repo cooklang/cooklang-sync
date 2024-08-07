@@ -33,11 +33,12 @@ const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(61);
 pub async fn run(
     pool: &ConnectionPool,
     storage_path: &Path,
+    namespace_id: i32,
     mut local_file_update_rx: Receiver<DebounceEventResult>,
     mut updated_tx: Sender<IndexerUpdateEvent>,
 ) -> Result<(), SyncError> {
     loop {
-        if check_index_once(pool, storage_path)? {
+        if check_index_once(pool, storage_path, namespace_id)? {
             updated_tx.send(IndexerUpdateEvent::Updated).await?;
         }
 
@@ -48,13 +49,17 @@ pub async fn run(
     }
 }
 
-pub fn check_index_once(pool: &ConnectionPool, storage_path: &Path) -> Result<bool, SyncError> {
+pub fn check_index_once(
+    pool: &ConnectionPool,
+    storage_path: &Path,
+    namespace_id: i32,
+) -> Result<bool, SyncError> {
     debug!("interval scan");
 
-    let from_db = get_file_records_from_registry(pool)?;
-    let from_fs = get_file_records_from_disk(storage_path)?;
+    let from_db = get_file_records_from_registry(pool, namespace_id)?;
+    let from_fs = get_file_records_from_disk(storage_path, namespace_id)?;
 
-    let (to_remove, to_add) = compare_records(from_db, from_fs);
+    let (to_remove, to_add) = compare_records(from_db, from_fs, namespace_id);
 
     if !to_remove.is_empty() || !to_add.is_empty() {
         let conn = &mut get_connection(pool)?;
@@ -81,7 +86,7 @@ fn filter_eligible(p: &Path) -> bool {
     chunker::is_text(p) || chunker::is_binary(p)
 }
 
-fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles, SyncError> {
+fn get_file_records_from_disk(base_path: &Path, namespace_id: i32) -> Result<DiskFiles, SyncError> {
     let mut cache = HashMap::new();
 
     let iter = WalkDir::new(base_path)
@@ -91,7 +96,7 @@ fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles, SyncError> 
         .filter(|p| filter_eligible(p));
 
     for p in iter {
-        let record = build_file_record(&p, base_path)?;
+        let record = build_file_record(&p, base_path, namespace_id)?;
 
         cache.insert(record.path.clone(), record);
     }
@@ -99,19 +104,26 @@ fn get_file_records_from_disk(base_path: &Path) -> Result<DiskFiles, SyncError> 
     Ok(cache)
 }
 
-fn get_file_records_from_registry(pool: &ConnectionPool) -> Result<DBFiles, SyncError> {
+fn get_file_records_from_registry(
+    pool: &ConnectionPool,
+    namespace_id: i32,
+) -> Result<DBFiles, SyncError> {
     let mut cache = HashMap::new();
 
     let conn = &mut get_connection(pool)?;
 
-    for record in registry::non_deleted(conn)? {
+    for record in registry::non_deleted(conn, namespace_id)? {
         cache.insert(record.path.clone(), record);
     }
 
     Ok(cache)
 }
 
-fn compare_records(from_db: DBFiles, from_fs: DiskFiles) -> (Vec<DeleteForm>, Vec<CreateForm>) {
+fn compare_records(
+    from_db: DBFiles,
+    from_fs: DiskFiles,
+    namespace_id: i32,
+) -> (Vec<DeleteForm>, Vec<CreateForm>) {
     let mut to_remove: Vec<DeleteForm> = Vec::new();
     let mut to_add: Vec<CreateForm> = Vec::new();
 
@@ -128,13 +140,13 @@ fn compare_records(from_db: DBFiles, from_fs: DiskFiles) -> (Vec<DeleteForm>, Ve
             // When file from DB is not present on a disk
             // we should mark it as deleted in DB
             None => {
-                to_remove.push(build_delete_form(db_file));
+                to_remove.push(build_delete_form(db_file, namespace_id));
             }
         }
     }
 
     for (p, disk_file) in &from_fs {
-        if from_db.get(p).is_none() {
+        if !from_db.contains_key(p) {
             to_add.push(disk_file.clone());
         }
     }
@@ -142,7 +154,7 @@ fn compare_records(from_db: DBFiles, from_fs: DiskFiles) -> (Vec<DeleteForm>, Ve
     (to_remove, to_add)
 }
 
-fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm, SyncError> {
+fn build_file_record(path: &Path, base: &Path, namespace_id: i32) -> Result<CreateForm, SyncError> {
     let metadata = path.metadata()?;
     // we assume that it was already checked and only one of these can be now
     let path = path.strip_prefix(base)?.to_string_lossy().into_owned();
@@ -156,17 +168,19 @@ fn build_file_record(path: &Path, base: &Path) -> Result<CreateForm, SyncError> 
         deleted: false,
         size,
         modified_at,
+        namespace_id,
     };
 
     Ok(f)
 }
 
-fn build_delete_form(record: &FileRecord) -> DeleteForm {
+fn build_delete_form(record: &FileRecord, namespace_id: i32) -> DeleteForm {
     DeleteForm {
         path: record.path.to_string(),
         jid: None,
         deleted: true,
         size: record.size,
         modified_at: record.modified_at,
+        namespace_id,
     }
 }

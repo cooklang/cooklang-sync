@@ -26,6 +26,7 @@ const MAX_UPLOAD_SIZE: usize = 1_000_000;
 pub async fn run(
     pool: &ConnectionPool,
     storage_path: &Path,
+    namespace_id: i32,
     chunker: &mut Chunker,
     remote: &Remote,
     local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
@@ -38,15 +39,23 @@ pub async fn run(
             pool,
             Arc::clone(&chunker),
             remote,
-            storage_path
+            storage_path,
+            namespace_id
         ))?;
     } else {
         let _ = try_join!(
-            download_loop(pool, Arc::clone(&chunker), remote, storage_path),
+            download_loop(
+                pool,
+                Arc::clone(&chunker),
+                remote,
+                storage_path,
+                namespace_id
+            ),
             upload_loop(
                 pool,
                 Arc::clone(&chunker),
                 remote,
+                namespace_id,
                 local_registry_updated_rx
             ),
         )?;
@@ -60,9 +69,18 @@ async fn download_loop(
     chunker: Arc<Mutex<&mut Chunker>>,
     remote: &Remote,
     storage_path: &Path,
+    namespace_id: i32,
 ) -> Result<()> {
     loop {
-        match check_download_once(pool, Arc::clone(&chunker), remote, storage_path).await {
+        match check_download_once(
+            pool,
+            Arc::clone(&chunker),
+            remote,
+            storage_path,
+            namespace_id,
+        )
+        .await
+        {
             Ok(v) => v,
             Err(SyncError::Unauthorized) => return Err(SyncError::Unauthorized),
             Err(_) => {
@@ -82,6 +100,7 @@ pub async fn upload_loop(
     pool: &ConnectionPool,
     chunker: Arc<Mutex<&mut Chunker>>,
     remote: &Remote,
+    namespace_id: i32,
     mut local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
 ) -> Result<()> {
     // wait for indexer to work first
@@ -90,7 +109,7 @@ pub async fn upload_loop(
     loop {
         // need to wait only if we didn't upload anything
         // otherwise it should re-run immideately
-        if check_upload_once(pool, Arc::clone(&chunker), remote).await? {
+        if check_upload_once(pool, Arc::clone(&chunker), remote, namespace_id).await? {
             // TODO test that it doesn't cancle stream
             tokio::select! {
                 _ = tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC) => {},
@@ -104,11 +123,12 @@ pub async fn check_upload_once(
     pool: &ConnectionPool,
     chunker: Arc<Mutex<&mut Chunker>>,
     remote: &Remote,
+    namespace_id: i32,
 ) -> Result<bool> {
     debug!("upload scan");
 
     let conn = &mut get_connection(pool)?;
-    let to_upload = registry::updated_locally(conn)?;
+    let to_upload = registry::updated_locally(conn, namespace_id)?;
 
     let mut upload_payload: Vec<Vec<(String, Vec<u8>)>> = vec![vec![]];
     let mut size = 0;
@@ -168,12 +188,13 @@ pub async fn check_download_once(
     chunker: Arc<Mutex<&mut Chunker>>,
     remote: &Remote,
     storage_path: &Path,
+    namespace_id: i32,
 ) -> Result<bool> {
     debug!("download scan");
 
     let conn = &mut get_connection(pool)?;
 
-    let latest_local = registry::latest_jid(conn).unwrap_or(0);
+    let latest_local = registry::latest_jid(conn, namespace_id).unwrap_or(0);
     let to_download = remote.list(latest_local).await?;
 
     for d in &to_download {
@@ -182,7 +203,7 @@ pub async fn check_download_once(
         let mut chunker = chunker.lock().await;
 
         if d.deleted {
-            let form = build_delete_form(&d.path, storage_path, d.id);
+            let form = build_delete_form(&d.path, storage_path, d.id, namespace_id);
             // TODO atomic?
             registry::delete(conn, &vec![form])?;
             chunker.delete(&d.path).await?;
@@ -206,7 +227,7 @@ pub async fn check_download_once(
                 error!("{:?}", e);
             }
 
-            let form = build_file_record(&d.path, storage_path, d.id)?;
+            let form = build_file_record(&d.path, storage_path, d.id, namespace_id)?;
             registry::create(conn, &vec![form])?;
         }
     }
@@ -214,7 +235,12 @@ pub async fn check_download_once(
     Ok(!to_download.is_empty())
 }
 
-fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::CreateForm, SyncError> {
+fn build_file_record(
+    path: &str,
+    base: &Path,
+    jid: i32,
+    namespace_id: i32,
+) -> Result<models::CreateForm, SyncError> {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
     let metadata = full_path.metadata()?;
@@ -228,12 +254,13 @@ fn build_file_record(path: &str, base: &Path, jid: i32) -> Result<models::Create
         deleted: false,
         size,
         modified_at,
+        namespace_id,
     };
 
     Ok(form)
 }
 
-fn build_delete_form(path: &str, base: &Path, jid: i32) -> models::DeleteForm {
+fn build_delete_form(path: &str, base: &Path, jid: i32, namespace_id: i32) -> models::DeleteForm {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
 
@@ -243,5 +270,6 @@ fn build_delete_form(path: &str, base: &Path, jid: i32) -> models::DeleteForm {
         deleted: true,
         size: 0,
         modified_at: OffsetDateTime::now_utc(),
+        namespace_id,
     }
 }

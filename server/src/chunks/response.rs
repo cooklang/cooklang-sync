@@ -1,14 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
 use crate::chunk_id::ChunkId;
 
 // todo try to avoid nesting?
@@ -19,9 +8,7 @@ pub(crate) struct MultiChunkResponse<'a> {
 
 impl MultiChunkResponse<'_> {
     pub fn new(chunk_ids: Vec<ChunkId<'_>>) -> MultiChunkResponse<'_> {
-        MultiChunkResponse {
-            chunk_ids
-        }
+        MultiChunkResponse { chunk_ids }
     }
 }
 
@@ -29,7 +16,6 @@ impl MultiChunkResponse<'_> {
 //     fn respond_to(self, _: &'r Request<'_>) -> rocket::response::Result<'static> {
 //         let mut response = Response::build();
 //         response.header(ContentType::new("multipart", "mixed; boundary=AXX-BOUNDARY"));
-
 
 //     //     if id == EMPTY_CHUNK_ID {
 //     //     None

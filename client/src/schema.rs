@@ -8,5 +8,6 @@ diesel::table! {
         path -> Text,
         modified_at -> TimestamptzSqlite,
         size -> BigInt,
+        namespace_id -> Integer,
     }
 }

@@ -31,11 +31,12 @@ pub fn delete(conn: &mut Connection, forms: &Vec<DeleteForm>) -> Result<usize> {
     insert_into(file_records::table).values(forms).execute(conn)
 }
 
-pub fn non_deleted(conn: &mut Connection) -> Result<Vec<FileRecord>> {
+pub fn non_deleted(conn: &mut Connection, namespace_id: i32) -> Result<Vec<FileRecord>> {
     trace!("non_deleted");
 
     // Consider only latest record for the same path.
     let subquery = file_records::table
+        .filter(file_records::namespace_id.eq(namespace_id))
         .group_by(file_records::path)
         .select(max(file_records::id))
         .into_boxed()
@@ -51,12 +52,13 @@ pub fn non_deleted(conn: &mut Connection) -> Result<Vec<FileRecord>> {
 
 /// Files that don't have jid
 /// These should be send to remote
-pub fn updated_locally(conn: &mut Connection) -> Result<Vec<FileRecord>> {
+pub fn updated_locally(conn: &mut Connection, namespace_id: i32) -> Result<Vec<FileRecord>> {
     trace!("updated_locally");
 
     // Need to ignore records which come after record with jid
     // for the same path
     let subquery = file_records::table
+        .filter(file_records::namespace_id.eq(namespace_id))
         .group_by(file_records::path)
         .select(max(file_records::id))
         .into_boxed()
@@ -71,11 +73,12 @@ pub fn updated_locally(conn: &mut Connection) -> Result<Vec<FileRecord>> {
     query.load::<FileRecord>(conn)
 }
 
-pub fn latest_jid(conn: &mut Connection) -> Result<i32> {
+pub fn latest_jid(conn: &mut Connection, namespace_id: i32) -> Result<i32> {
     trace!("latest_jid");
 
     let r = file_records::table
         .filter(file_records::jid.is_not_null())
+        .filter(file_records::namespace_id.eq(namespace_id))
         .select(FileRecord::as_select())
         .order(file_records::jid.desc())
         .first::<FileRecord>(conn);

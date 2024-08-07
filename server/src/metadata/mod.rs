@@ -9,12 +9,12 @@ use std::time::Duration;
 
 use crate::auth::user::User;
 
+mod db;
 mod middleware;
+mod models;
 mod notification;
 mod request;
 mod response;
-mod db;
-mod models;
 mod schema;
 
 use db::{insert_new_record, list as db_list, Db};

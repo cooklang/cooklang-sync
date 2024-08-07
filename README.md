@@ -17,6 +17,8 @@ Suitable for syncing text files and not large (<10MB) binary files.
 - Security audit and hardening
 - Streaming
 - PG as DB for server
+- Garbage collection for client
+- Namespaces for client
 
 ## Running
 

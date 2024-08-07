@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use rocket::request::FromParam;
 
-
 /// A _probably_ unique chunk ID.
 #[derive(UriDisplayPath, PartialEq, FromForm, Debug, Clone)]
 pub struct ChunkId<'a>(pub(crate) Cow<'a, str>);

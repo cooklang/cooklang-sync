@@ -1,6 +1,6 @@
 [package]
 name = "cooklang-sync-server"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Alexey Dubovskoy <alexey@cooklang.org>"]
 edition = "2021"
 description = "A server library for cooklang-sync"

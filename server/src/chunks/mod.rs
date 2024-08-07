@@ -7,9 +7,8 @@ use rocket::tokio::io::AsyncWriteExt;
 
 use rocket::async_stream::stream;
 
-use rocket::futures::stream::StreamExt;
 use rocket::futures::Stream;
-use rocket::http::ContentType;
+use rocket::http::{ContentType, Header};
 use rocket::tokio::fs::File;
 
 use crate::auth::user::User;
@@ -139,15 +138,21 @@ struct ChunkIds<'a>(Vec<ChunkId<'a>>);
 async fn download_chunks(
     chunk_ids: Form<ChunkIds<'_>>,
 ) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
-    MultipartStream::new_random(stream! {
-        for chunk_id in &chunk_ids.0 {
-            let file = File::open(chunk_id.file_path()).await.expect("file present");
+    let cloned_chunk_ids: Vec<_> = chunk_ids.0.iter().map(|chunk_id| {
+        let id = chunk_id.id().to_string(); // Assuming id is of type &str
+        let file_path = chunk_id.file_path(); // Assuming file_path is of type &str
+        (id, file_path)
+    }).collect();
 
-            yield MultipartSection {
-                content_type: Some(ContentType::Text),
-                content_encoding: None,
-                content: Box::pin(file)
-            };
+    MultipartStream::new_random(stream! {
+        for (id, file_path) in cloned_chunk_ids {
+            let file = File::open(file_path).await.expect("file present");
+
+            let section = MultipartSection::new(file)
+                .add_header(ContentType::Text)
+                .add_header(Header::new("X-Chunk-ID", id));
+
+            yield section
         }
     })
 }

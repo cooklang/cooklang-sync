@@ -2109,9 +2109,9 @@ dependencies = [
 
 [[package]]
 name = "rocket-multipart"
-version = "0.1.1"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e30cada0d85b9da9c3574f40ab9d67a63e95235268ab318a456143503f0b6bdc"
+checksum = "2cb306196b9a0746150d0e3b61cebbeb903943d7f61eb26b82d5fb921988fc49"
 dependencies = [
  "memchr",
  "rand",

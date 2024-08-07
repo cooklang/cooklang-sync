@@ -12,7 +12,7 @@ impl ChunkId<'_> {
     /// Returns the path to the chunk in `upload/` corresponding to this ID.
     pub fn file_path(&self) -> PathBuf {
         let root = env::var("UPLOAD_DIR").unwrap_or(String::from("./upload"));
-        let id_str = self.0.as_ref();
+        let id_str = self.id();
 
         if id_str.len() < 2 {
             return Path::new(&root).join("null").join(id_str);

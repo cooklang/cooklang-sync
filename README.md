@@ -19,6 +19,7 @@ Suitable for syncing text files and not large (<10MB) binary files.
 - PG as DB for server
 - Garbage collection for client
 - Namespaces for client
+- Support of symlinks
 
 ## Running
 

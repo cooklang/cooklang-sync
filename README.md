@@ -20,6 +20,7 @@ Suitable for syncing text files and not large (<10MB) binary files.
 - Garbage collection for client
 - Namespaces for client
 - Support of symlinks
+- Hidden files
 
 ## Running
 

@@ -6,19 +6,15 @@ Suitable for syncing text files and not large (<10MB) binary files.
 
 ## Roadmap
 
-- Not even alpha
 - Batch Downloading
 - Tests!
 - Need to generalise, now it’s too specific to our case
-- Used in Cooklang Android app
 - Improve DevEx for external developers
 - Read only files
 - Export metrics
 - Security audit and hardening
 - Streaming
-- PG as DB for server
 - Garbage collection for client
-- Namespaces for client
 - Support of symlinks
 - Hidden files
 

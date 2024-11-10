@@ -206,7 +206,9 @@ pub async fn check_download_once(
             let form = build_delete_form(&d.path, storage_path, d.id, namespace_id);
             // TODO atomic?
             registry::delete(conn, &vec![form])?;
-            chunker.delete(&d.path).await?;
+            if chunker.exists(&d.path) {
+                chunker.delete(&d.path).await?;
+            }
         } else {
             let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
 
@@ -243,9 +245,9 @@ fn build_file_record(
 ) -> Result<models::CreateForm, SyncError> {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
-    let metadata = full_path.metadata()?;
+    let metadata = full_path.metadata().map_err(|e| SyncError::from_io_error(path, e))?;
     let size: i64 = metadata.len().try_into()?;
-    let time = metadata.modified()?;
+    let time = metadata.modified().map_err(|e| SyncError::from_io_error(path, e))?;
     let modified_at = OffsetDateTime::from(time);
 
     let form = models::CreateForm {

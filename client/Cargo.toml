@@ -17,7 +17,6 @@ path = "src/lib.rs"
 name = "cooklang_sync_client"
 crate-type = ["lib", "cdylib", "staticlib"]
 
-
 [dependencies]
 diesel = { version = "2.1.4", features = ["sqlite", "time", "r2d2", "serde_json"] }
 diesel_migrations = { version = "2.1.0", features = ["sqlite"] }
@@ -28,14 +27,14 @@ notify = "6.1.1"
 notify-debouncer-mini = "0.4.1"
 quick_cache = "0.4.1"
 reqwest = { version = "0.11.24", features = ["json", "multipart", "gzip"] }
-rusqlite = { version = "0.30.0", features = ["bundled"] }
+rusqlite = { version = "0.32.1", features = ["bundled"] }
 serde = { version = "1.0.196", features = ["derive"] }
 serde_json = "1.0.113"
 sha2 = "0.10.8"
 thiserror = "1.0.57"
 time = { version = "0.3.31", features = ["std"] }
 tokio = { version = "1.35.1", features = ["time", "fs", "macros", "rt-multi-thread"] }
-uniffi = "0.26.1"
+uniffi = "0.28.1"
 uuid = { version = "1.7.0", features = ["v4"] }
 walkdir = "2.4.0"
 openssl = { version = "0.10", features = ["vendored"] }

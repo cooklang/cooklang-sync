@@ -1,10 +1,16 @@
 use thiserror::Error;
+use std::path::PathBuf;
 
 #[derive(Error, Debug, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum SyncError {
+    #[error("IO error in file {path}: {source}")]
+    IoError {
+        path: String,
+        source: std::io::Error,
+    },
     #[error("IO error {0}")]
-    IoError(#[from] std::io::Error),
+    IoErrorGeneric(#[from] std::io::Error),
     #[error("Notify error {0}")]
     NotifyError(#[from] notify::Error),
     #[error("Strip prefix error {0}")]
@@ -33,4 +39,13 @@ pub enum SyncError {
     UnlistedFileFormat(String),
     #[error("Unknown error")]
     Unknown,
+}
+
+impl SyncError {
+    pub fn from_io_error(path: impl Into<PathBuf>, error: std::io::Error) -> Self {
+        SyncError::IoError {
+            path: path.into().display().to_string(),
+            source: error,
+        }
+    }
 }

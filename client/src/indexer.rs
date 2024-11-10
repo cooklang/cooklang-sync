@@ -155,11 +155,11 @@ fn compare_records(
 }
 
 fn build_file_record(path: &Path, base: &Path, namespace_id: i32) -> Result<CreateForm, SyncError> {
-    let metadata = path.metadata()?;
+    let metadata = path.metadata().map_err(|e| SyncError::from_io_error(path, e))?;
     // we assume that it was already checked and only one of these can be now
     let path = path.strip_prefix(base)?.to_string_lossy().into_owned();
     let size: i64 = metadata.len().try_into()?;
-    let time = metadata.modified()?;
+    let time = metadata.modified().map_err(|e| SyncError::from_io_error(path.clone(), e))?;
     let modified_at = OffsetDateTime::from(time);
 
     let f = CreateForm {

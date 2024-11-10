@@ -42,13 +42,13 @@ impl Chunker {
     }
 
     async fn hashify_binary(&mut self, path: &str) -> Result<Vec<String>> {
-        let file = File::open(self.full_path(path)).await?;
+        let file = File::open(self.full_path(path)).await.map_err(|e| SyncError::from_io_error(path, e))?;
         let mut reader = BufReader::new(file);
         let mut hashes = Vec::new();
         let mut buffer = vec![0u8; BINARY_CHUNK_SIZE];
 
         loop {
-            let bytes_read = reader.read(&mut buffer).await?;
+            let bytes_read = reader.read(&mut buffer).await.map_err(|e| SyncError::from_io_error(path, e))?;
             if bytes_read == 0 {
                 break;
             }
@@ -63,12 +63,12 @@ impl Chunker {
     }
 
     async fn hashify_text(&mut self, path: &str) -> Result<Vec<String>> {
-        let file = File::open(self.full_path(path)).await?;
+        let file = File::open(self.full_path(path)).await.map_err(|e| SyncError::from_io_error(path, e))?;
         let mut reader = BufReader::new(file);
         let mut buffer = Vec::new();
         let mut hashes = Vec::new();
 
-        while reader.read_until(b'\n', &mut buffer).await? > 0 {
+        while reader.read_until(b'\n', &mut buffer).await.map_err(|e| SyncError::from_io_error(path, e))? > 0 {
             let data: Vec<u8> = buffer.clone();
             let hash = self.hash(&data, TEXT_HASH_SIZE);
             self.save_chunk(&hash, data)?;
@@ -103,19 +103,19 @@ impl Chunker {
         trace!("saving {:?}", path);
         let full_path = self.full_path(path);
         if let Some(parent) = full_path.parent() {
-            create_dir_all(parent).await?;
+            create_dir_all(parent).await.map_err(|e| SyncError::from_io_error(path, e))?;
         }
 
-        let file = File::create(full_path).await?;
+        let file = File::create(full_path).await.map_err(|e| SyncError::from_io_error(path, e))?;
         let mut writer = BufWriter::new(file);
 
         for hash in hashes {
             let chunk = self.cache.get(hash)?;
 
-            writer.write_all(&chunk).await?;
+            writer.write_all(&chunk).await.map_err(|e| SyncError::from_io_error(path, e))?;
         }
 
-        writer.flush().await?;
+        writer.flush().await.map_err(|e| SyncError::from_io_error(path, e))?;
 
         Ok(())
     }
@@ -125,7 +125,7 @@ impl Chunker {
         let full_path = self.full_path(path);
 
         // TODO delete folders up too
-        fs::remove_file(full_path).await?;
+        fs::remove_file(full_path).await.map_err(|e| SyncError::from_io_error(path, e))?;
 
         Ok(())
     }

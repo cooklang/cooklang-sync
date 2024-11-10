@@ -2,7 +2,7 @@
 linker = "x86_64-linux-android29-clang"
 ar = "llvm-ar"
 rustflags = [
-    "-L$NDK_HOME/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/17.0.2/lib/linux/",
+    "-L/Users/alexeydubovskoy/Library/Android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/lib/clang/18/lib/linux",
     "-lstatic=clang_rt.builtins-x86_64-android"
 ]
 

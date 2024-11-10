@@ -1,0 +1,9 @@
+[bindings.kotlin]
+package_name = "org.cooklang.sync"
+generate_immutable_records = true
+android = true
+
+[bindings.swift]
+ffi_module_name = "CooklangSyncClientFFI"
+module_name = "CooklangSyncClient"
+generate_immutable_records = true

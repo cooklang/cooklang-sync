@@ -99,6 +99,11 @@ pub fn run_download_once(
     remote_token: &str,
     namespace_id: i32,
 ) -> Result<(), errors::SyncError> {
+
+    use std::env;
+
+    env::set_var("CARGO_LOG", "trace");
+
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new(INMEMORY_CACHE_MAX_REC, INMEMORY_CACHE_MAX_MEM);
     let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());

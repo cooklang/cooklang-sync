@@ -1,5 +1,5 @@
-use thiserror::Error;
 use std::path::PathBuf;
+use thiserror::Error;
 
 #[derive(Error, Debug, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -39,6 +39,8 @@ pub enum SyncError {
     UnlistedFileFormat(String),
     #[error("Unknown error")]
     Unknown,
+    #[error("Batch download error {0}")]
+    BatchDownloadError(String),
 }
 
 impl SyncError {

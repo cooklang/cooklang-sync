@@ -22,6 +22,7 @@ const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 const NO_INTERNET_SLEEP_SEC: Duration = Duration::from_secs(61);
 // TODO should be in sync in multiple places
 const MAX_UPLOAD_SIZE: usize = 1_000_000;
+const CHUNK_BATCH_SIZE: usize = 50;
 
 pub async fn run(
     pool: &ConnectionPool,
@@ -217,9 +218,19 @@ pub async fn check_download_once(
                 chunker.hashify(&d.path).await?;
             }
 
-            for c in &chunks {
-                if !chunker.check_chunk(c)? {
-                    chunker.save_chunk(c, remote.download(c).await?)?;
+            let missing_chunks: Vec<&str> = chunks
+                .iter()
+                .filter(|c| !chunker.check_chunk(c).unwrap_or(true))
+                .copied()
+                .collect();
+
+            if !missing_chunks.is_empty() {
+                // Download chunks in batches of 50
+                for chunk_batch in missing_chunks.chunks(CHUNK_BATCH_SIZE) {
+                    let downloaded = remote.download_batch(chunk_batch.to_vec()).await?;
+                    for (chunk_id, data) in downloaded {
+                        chunker.save_chunk(&chunk_id, data)?;
+                    }
                 }
             }
 
@@ -245,9 +256,13 @@ fn build_file_record(
 ) -> Result<models::CreateForm, SyncError> {
     let mut full_path = base.to_path_buf();
     full_path.push(path);
-    let metadata = full_path.metadata().map_err(|e| SyncError::from_io_error(path, e))?;
+    let metadata = full_path
+        .metadata()
+        .map_err(|e| SyncError::from_io_error(path, e))?;
     let size: i64 = metadata.len().try_into()?;
-    let time = metadata.modified().map_err(|e| SyncError::from_io_error(path, e))?;
+    let time = metadata
+        .modified()
+        .map_err(|e| SyncError::from_io_error(path, e))?;
     let modified_at = OffsetDateTime::from(time);
 
     let form = models::CreateForm {

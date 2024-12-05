@@ -99,7 +99,6 @@ pub fn run_download_once(
     remote_token: &str,
     namespace_id: i32,
 ) -> Result<(), errors::SyncError> {
-
     use std::env;
 
     env::set_var("CARGO_LOG", "trace");

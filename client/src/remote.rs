@@ -8,7 +8,6 @@ use reqwest::{multipart, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
 use crate::errors::SyncError;
-
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -207,6 +206,126 @@ impl Remote {
             }
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
             _ => Err(SyncError::Unknown),
+        }
+    }
+
+    pub async fn download_batch(&self, chunk_ids: Vec<&str>) -> Result<Vec<(String, Vec<u8>)>> {
+        trace!("Starting download_batch with chunk_ids: {:?}", chunk_ids);
+
+        let params: Vec<(&str, &str)> = chunk_ids.iter().map(|&id| ("chunk_ids[]", id)).collect();
+        trace!("Constructed params for request: {:?}", params);
+
+        let response = self
+            .client
+            .post(self.api_endpoint.clone() + "/chunks/download")
+            .headers(self.auth_headers())
+            .form(&params)
+            .send()
+            .await?;
+        trace!("Received response with status: {:?}", response.status());
+
+        match response.status() {
+            StatusCode::OK => {
+                let content_type = response
+                    .headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .ok_or(SyncError::BatchDownloadError(
+                        "No content-type header".to_string(),
+                    ))?;
+                trace!("Content-Type of response: {:?}", content_type);
+
+                let boundary =
+                    content_type
+                        .split("boundary=")
+                        .nth(1)
+                        .ok_or(SyncError::BatchDownloadError(
+                            "No boundary in content-type header".to_string(),
+                        ))?;
+                trace!("Extracted boundary: {:?}", boundary);
+
+                let boundary_string = format!("--{}", boundary);
+
+                let bytes = response.bytes().await?;
+                trace!("Received bytes: {:?}", bytes.len());
+
+                let mut parts = Vec::new();
+                let mut pos = 0;
+
+                while pos < bytes.len() {
+                    // Find next boundary
+                    trace!("Searching for boundary at position: {:?}", pos);
+                    let boundary_pos = bytes[pos..]
+                        .windows(boundary_string.len())
+                        .position(|window| window == boundary_string.as_bytes())
+                        .map(|p| p + pos)
+                        .ok_or(SyncError::BatchDownloadError(
+                            "No boundary found".to_string(),
+                        ))?;
+
+                    // Skip initial boundary
+                    if pos == 0 {
+                        trace!("Skipping initial boundary");
+                        pos = boundary_pos + boundary_string.len();
+                        continue;
+                    }
+
+                    let part = &bytes[pos..boundary_pos];
+                    if !part.is_empty() {
+                        trace!("Processing part with length: {:?}", part.len());
+                        // Split headers and content at first double CRLF
+                        if let Some(headers_end) = find_double_crlf(part) {
+                            let headers =
+                                std::str::from_utf8(&part[..headers_end]).map_err(|_| {
+                                    SyncError::BatchDownloadError("Invalid headers".to_string())
+                                })?;
+
+                            // Extract chunk ID from headers
+                            let chunk_id = headers
+                                .lines()
+                                .find(|line| line.starts_with("X-Chunk-ID:"))
+                                .and_then(|line| line.split(": ").nth(1))
+                                .ok_or(SyncError::BatchDownloadError(
+                                    "No chunk ID found".to_string(),
+                                ))?
+                                .trim()
+                                .to_string();
+
+                            // Get content (skipping the double CRLF)
+                            let content = part[headers_end + 4..].to_vec();
+                            trace!(
+                                "Extracted chunk_id: {:?}, content length: {}",
+                                chunk_id,
+                                content.len()
+                            );
+
+                            parts.push((chunk_id, content));
+                        }
+                    }
+
+                    pos = boundary_pos + boundary_string.len();
+
+                    // Check if this is the final boundary
+                    if pos + 4 <= bytes.len() && &bytes[pos..pos + 4] == b"--\r\n" {
+                        break;
+                    }
+                }
+
+                // Helper function to find double CRLF
+                fn find_double_crlf(data: &[u8]) -> Option<usize> {
+                    data.windows(4).position(|window| window == b"\r\n\r\n")
+                }
+
+                Ok(parts)
+            }
+            StatusCode::UNAUTHORIZED => {
+                trace!("Unauthorized access during download_batch");
+                Err(SyncError::Unauthorized)
+            }
+            _ => {
+                trace!("Unknown error occurred during download_batch");
+                Err(SyncError::Unknown)
+            }
         }
     }
 }

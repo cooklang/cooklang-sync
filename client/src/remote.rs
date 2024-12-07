@@ -7,10 +7,12 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use reqwest::{multipart, StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 
 use crate::errors::SyncError;
 type Result<T, E = SyncError> = std::result::Result<T, E>;
+
+const REQUEST_TIMEOUT_SECS: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ResponseFileRecord {
@@ -35,7 +37,11 @@ pub struct Remote {
 
 impl Remote {
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
-        let rc = reqwest::ClientBuilder::new().gzip(true).build().unwrap();
+        let rc = reqwest::ClientBuilder::new()
+            .gzip(true)
+            .timeout(REQUEST_TIMEOUT_SECS)
+            .build()
+            .unwrap();
         let client = ClientBuilder::new(rc)
             // .with(OriginalHeadersMiddleware)
             .build();
@@ -211,62 +217,64 @@ impl Remote {
         }
     }
 
-    pub async fn download_batch(&self, chunk_ids: Vec<&str>) -> Result<Vec<(String, Vec<u8>)>> {
-        trace!("Starting download_batch with chunk_ids: {:?}", chunk_ids);
+    pub async fn download_batch<'a>(
+        &'a self,
+        chunk_ids: Vec<&'a str>,
+    ) -> impl Stream<Item = Result<(String, Vec<u8>)>> + Unpin + 'a {
+        Box::pin(async_stream::try_stream! {
+            trace!("Starting download_batch with chunk_ids: {:?}", chunk_ids);
 
-        let params: Vec<(&str, &str)> = chunk_ids.iter().map(|&id| ("chunk_ids[]", id)).collect();
+            let params: Vec<(&str, &str)> = chunk_ids.iter().map(|&id| ("chunk_ids[]", id)).collect();
 
-        let response = self
-            .client
-            .post(self.api_endpoint.clone() + "/chunks/download")
-            .headers(self.auth_headers())
-            .form(&params)
-            .send()
-            .await?;
-        trace!("Received response with status: {:?}", response.status());
+            let response = self
+                .client
+                .post(self.api_endpoint.clone() + "/chunks/download")
+                .headers(self.auth_headers())
+                .form(&params)
+                .send()
+                .await?;
+            trace!("Received response with status: {:?}", response.status());
 
-        match response.status() {
-            StatusCode::OK => {
-                let content_type = response
-                    .headers()
-                    .get("content-type")
-                    .and_then(|v| v.to_str().ok())
-                    .ok_or(SyncError::BatchDownloadError(
-                        "No content-type header".to_string(),
-                    ))?
-                    .to_string();
+            match response.status() {
+                StatusCode::OK => {
+                    let content_type = response
+                        .headers()
+                        .get("content-type")
+                        .and_then(|v| v.to_str().ok())
+                        .ok_or(SyncError::BatchDownloadError(
+                            "No content-type header".to_string(),
+                        ))?
+                        .to_string();
 
-                let boundary = content_type
-                    .split("boundary=")
-                    .nth(1)
-                    .ok_or(SyncError::BatchDownloadError(
-                        "No boundary in content-type header".to_string(),
-                    ))?;
+                    let boundary = content_type
+                        .split("boundary=")
+                        .nth(1)
+                        .ok_or(SyncError::BatchDownloadError(
+                            "No boundary in content-type header".to_string(),
+                        ))?;
 
-                let boundary_bytes = format!("--{}", boundary).into_bytes();
+                    let boundary_bytes = format!("--{}", boundary).into_bytes();
 
-                let mut stream = response.bytes_stream();
-                let mut buffer = Vec::new();
-                let mut parts = Vec::new();
+                    let mut stream = response.bytes_stream();
+                    let mut buffer = Vec::new();
 
-                while let Some(chunk) = stream.next().await {
-                    let chunk = chunk?;
-                    buffer.extend_from_slice(&chunk);
+                    while let Some(chunk) = stream.next().await {
+                        let chunk = chunk?;
+                        buffer.extend_from_slice(&chunk);
 
-                    // Process complete parts from buffer
-                    while let Some((part, remaining)) = extract_next_part(&buffer, &boundary_bytes)? {
-                        if let Some((chunk_id, content)) = process_part(&part)? {
-                            parts.push((chunk_id, content));
+                        // Process complete parts from buffer
+                        while let Some((part, remaining)) = extract_next_part(&buffer, &boundary_bytes)? {
+                            if let Some((chunk_id, content)) = process_part(&part)? {
+                                yield (chunk_id, content);
+                            }
+                            buffer = remaining;
                         }
-                        buffer = remaining;
                     }
                 }
-
-                Ok(parts)
+                StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized)?,
+                _ => Err(SyncError::Unknown)?,
             }
-            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => Err(SyncError::Unknown),
-        }
+        })
     }
 }
 

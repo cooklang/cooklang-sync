@@ -40,6 +40,7 @@ walkdir = "2.4.0"
 openssl = { version = "0.10", features = ["vendored"] }
 reqwest-middleware = "0.2.4"
 jsonwebtoken = "9.3.0"
+async-stream = "0.3.6"
 
 
 [[bin]]

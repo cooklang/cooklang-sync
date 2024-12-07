@@ -225,11 +225,22 @@ pub async fn check_download_once(
                 .collect();
 
             if !missing_chunks.is_empty() {
-                // Download chunks in batches of 50
                 for chunk_batch in missing_chunks.chunks(CHUNK_BATCH_SIZE) {
-                    let downloaded = remote.download_batch(chunk_batch.to_vec()).await?;
-                    for (chunk_id, data) in downloaded {
-                        chunker.save_chunk(&chunk_id, data)?;
+                    let ids = chunk_batch.to_vec();
+
+                    // Pin the stream using pin_mut!
+                    let mut downloaded = remote.download_batch(ids).await;
+
+                    // Now we can use .next() on the pinned stream
+                    while let Some(result) = downloaded.next().await {
+                        match result {
+                            Ok((chunk_id, data)) => {
+                                chunker.save_chunk(&chunk_id, data)?;
+                            }
+                            Err(e) => {
+                                return Err(e);
+                            }
+                        }
                     }
                 }
             }

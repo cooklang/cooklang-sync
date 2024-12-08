@@ -230,7 +230,7 @@ pub fn is_text(p: &Path) -> bool {
     if let Some(ext) = p.extension() {
         let ext = ext.to_ascii_lowercase();
 
-        ext == "cook" || ext == "conf" || ext == "yaml" || ext == "yml"
+        ext == "cook" || ext == "conf" || ext == "yaml" || ext == "yml" || ext == "md"
     } else {
         false
     }

@@ -1,5 +1,5 @@
 [default]
-limits = { bytes = "2Mib", data-form = "2Mib", file = "2Mib"}
+limits = { bytes = "5Mib", data-form = "5Mib", file = "5Mib", form = "1Mib"}
 
 [default.databases.metadata]
 url = "db/server.sqlite3"

@@ -162,11 +162,11 @@ impl Chunker {
         self.cache.set(chunk_hash, content)
     }
 
-    pub fn check_chunk(&self, chunk_hash: &str) -> Result<bool> {
+    pub fn check_chunk(&self, chunk_hash: &str) -> bool {
         if chunk_hash.is_empty() {
-            Ok(true)
+            true
         } else {
-            Ok(self.cache.contains(chunk_hash))
+            self.cache.contains(chunk_hash)
         }
     }
 }
@@ -196,6 +196,7 @@ impl InMemoryCache {
         if chunk_hash.is_empty() {
             return Ok(vec![]);
         }
+
         match self.cache.get(chunk_hash) {
             Some(content) => Ok(content.clone()),
             None => Err(SyncError::GetFromCacheError),
@@ -220,7 +221,7 @@ pub fn is_binary(p: &Path) -> bool {
     if let Some(ext) = p.extension() {
         let ext = ext.to_ascii_lowercase();
 
-        ext == "jpg" || ext == "jpeg" || ext == "png" || ext == "gif"
+        ext == "jpg" || ext == "jpeg" || ext == "png"
     } else {
         false
     }
@@ -230,7 +231,7 @@ pub fn is_text(p: &Path) -> bool {
     if let Some(ext) = p.extension() {
         let ext = ext.to_ascii_lowercase();
 
-        ext == "cook" || ext == "conf" || ext == "yaml" || ext == "yml" || ext == "md"
+        ext == "cook" || ext == "conf" || ext == "yaml" || ext == "yml" || ext == "md" || ext == "cplan"
     } else {
         false
     }

@@ -12,7 +12,7 @@ use futures::{Stream, StreamExt};
 use crate::errors::SyncError;
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
-const REQUEST_TIMEOUT_SECS: std::time::Duration = std::time::Duration::from_secs(10);
+pub const REQUEST_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ResponseFileRecord {
@@ -39,7 +39,7 @@ impl Remote {
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
         let rc = reqwest::ClientBuilder::new()
             .gzip(true)
-            .timeout(REQUEST_TIMEOUT_SECS)
+            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
             .build()
             .unwrap();
         let client = ClientBuilder::new(rc)
@@ -101,7 +101,7 @@ impl Remote {
 
         let response = self
             .client
-            .post(self.api_endpoint.clone() + "/chunks/")
+            .post(self.api_endpoint.clone() + "/chunks/upload")
             .headers(self.auth_headers())
             .multipart(form)
             .send()
@@ -158,7 +158,7 @@ impl Remote {
         }
     }
 
-    pub async fn poll(&self, seconds: i32) -> Result<()> {
+    pub async fn poll(&self, seconds: u64) -> Result<()> {
         trace!("started poll");
 
         let seconds_string = seconds.to_string();
@@ -174,13 +174,18 @@ impl Remote {
             )
             .headers(self.auth_headers())
             .send()
-            .await?;
+            .await;
 
-        match response.status() {
-            StatusCode::OK => Ok(()),
-            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            // Don't need to error as it's expected to be cancelled from time to time
-            _ => Ok(()),
+        // Handle the response, ignoring timeout errors
+        match response {
+            Ok(response) => match response.status() {
+                StatusCode::OK => Ok(()),
+                StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+                // Don't need to error as it's expected to be cancelled from time to time
+                _ => Ok(()),
+            },
+            Err(e) if e.is_timeout() => Ok(()), // Ignore timeout errors
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -307,7 +312,8 @@ fn process_part(part: &[u8]) -> Result<Option<(String, Vec<u8>)>> {
             .trim()
             .to_string();
 
-        let content = part[headers_end + 4..].to_vec();
+        // remove last 2 bytes as they are the boundary
+        let content = part[headers_end + 4..part.len() - 2].to_vec();
         Ok(Some((chunk_id, content)))
     } else {
         Ok(None)

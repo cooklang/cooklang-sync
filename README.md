@@ -6,15 +6,14 @@ Suitable for syncing text files and not large (<10MB) binary files.
 
 ## Roadmap
 
-- Batch Downloading
+- Streaming
+- Garbage collection for client
 - Tests!
 - Need to generalise, now it’s too specific to our case
 - Improve DevEx for external developers
 - Read only files
 - Export metrics
 - Security audit and hardening
-- Streaming
-- Garbage collection for client
 - Support of symlinks
 - Hidden files
 

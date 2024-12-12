@@ -95,7 +95,8 @@ async fn upload_chunks(
 
         while let Some(chunk) = match field.chunk().await {
             Ok(v) => v,
-            Err(_e) => {
+            Err(e) => {
+                error!("Error reading chunk {:?}", e);
                 fs::remove_file(&full_path).await.ok();
 
                 // TODO

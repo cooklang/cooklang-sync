@@ -81,7 +81,7 @@ pub fn run(
 pub fn wait_remote_update(
     api_endpoint: &str,
     remote_token: &str,
-    wait_time: i32,
+    wait_time: u64,
 ) -> Result<(), errors::SyncError> {
     Runtime::new()?.block_on(remote::Remote::new(api_endpoint, remote_token).poll(wait_time))?;
 

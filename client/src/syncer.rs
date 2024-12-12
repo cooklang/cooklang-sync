@@ -13,16 +13,14 @@ use crate::connection::{get_connection, ConnectionPool};
 use crate::errors::SyncError;
 use crate::models;
 use crate::registry;
-use crate::remote::{CommitResultStatus, Remote};
+use crate::remote::{CommitResultStatus, Remote, REQUEST_TIMEOUT_SECS};
 
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
-const INTERVAL_CHECK_DOWNLOAD_SEC: i32 = 307;
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 const NO_INTERNET_SLEEP_SEC: Duration = Duration::from_secs(61);
 // TODO should be in sync in multiple places
-const MAX_UPLOAD_SIZE: usize = 1_000_000;
-const CHUNK_BATCH_SIZE: usize = 50;
+const MAX_UPLOAD_SIZE: usize = 3_000_000;
 
 pub async fn run(
     pool: &ConnectionPool,
@@ -93,7 +91,9 @@ async fn download_loop(
             }
         };
 
-        remote.poll(INTERVAL_CHECK_DOWNLOAD_SEC).await?;
+        // need to be longer than request timeout to make sure we don't get
+        // client side timeout error
+        remote.poll(REQUEST_TIMEOUT_SECS + 10).await?;
     }
 }
 
@@ -131,9 +131,9 @@ pub async fn check_upload_once(
     let conn = &mut get_connection(pool)?;
     let to_upload = registry::updated_locally(conn, namespace_id)?;
 
-    let mut upload_payload: Vec<Vec<(String, Vec<u8>)>> = vec![vec![]];
+    let mut upload_queue: Vec<Vec<(String, Vec<u8>)>> = vec![vec![]];
     let mut size = 0;
-    let mut last = upload_payload.last_mut().unwrap();
+    let mut last = upload_queue.last_mut().unwrap();
     let mut all_commited = true;
 
     for f in &to_upload {
@@ -166,8 +166,8 @@ pub async fn check_upload_once(
                     last.push((c.into(), data));
 
                     if size > MAX_UPLOAD_SIZE {
-                        upload_payload.push(vec![]);
-                        last = upload_payload.last_mut().unwrap();
+                        upload_queue.push(vec![]);
+                        last = upload_queue.last_mut().unwrap();
                         size = 0;
                     }
                 }
@@ -175,7 +175,7 @@ pub async fn check_upload_once(
         }
     }
 
-    for batch in upload_payload {
+    for batch in upload_queue {
         if !batch.is_empty() {
             remote.upload_batch(batch).await?;
         }
@@ -197,9 +197,52 @@ pub async fn check_download_once(
 
     let latest_local = registry::latest_jid(conn, namespace_id).unwrap_or(0);
     let to_download = remote.list(latest_local).await?;
+    // TODO maybe should limit one download at a time and use batches
+    // it can also overflow in-memory cache
+    let mut download_queue: Vec<&str> = vec![];
 
     for d in &to_download {
-        trace!("to download {:?}", d);
+        trace!("collecting needed chunks for {:?}", d);
+
+        if d.deleted {
+            continue;
+        }
+
+        let mut chunker = chunker.lock().await;
+
+        // Warm-up cache to include chunks from an old file
+        if chunker.exists(&d.path) {
+            chunker.hashify(&d.path).await?;
+        }
+
+        for c in d.chunk_ids.split(',') {
+            if chunker.check_chunk(c) {
+                continue;
+            }
+
+            download_queue.push(c);
+        }
+    }
+
+    if !download_queue.is_empty() {
+        let mut chunker = chunker.lock().await;
+
+        let mut downloaded = remote.download_batch(download_queue).await;
+
+        while let Some(result) = downloaded.next().await {
+            match result {
+                Ok((chunk_id, data)) => {
+                    chunker.save_chunk(&chunk_id, data)?;
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    for d in &to_download {
+        trace!("udpating downloaded files {:?}", d);
 
         let mut chunker = chunker.lock().await;
 
@@ -212,43 +255,11 @@ pub async fn check_download_once(
             }
         } else {
             let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
-
-            // Warm-up cache to include chunks from an old file
-            if chunker.exists(&d.path) {
-                chunker.hashify(&d.path).await?;
-            }
-
-            let missing_chunks: Vec<&str> = chunks
-                .iter()
-                .filter(|c| !chunker.check_chunk(c).unwrap_or(true))
-                .copied()
-                .collect();
-
-            if !missing_chunks.is_empty() {
-                for chunk_batch in missing_chunks.chunks(CHUNK_BATCH_SIZE) {
-                    let ids = chunk_batch.to_vec();
-
-                    // Pin the stream using pin_mut!
-                    let mut downloaded = remote.download_batch(ids).await;
-
-                    // Now we can use .next() on the pinned stream
-                    while let Some(result) = downloaded.next().await {
-                        match result {
-                            Ok((chunk_id, data)) => {
-                                chunker.save_chunk(&chunk_id, data)?;
-                            }
-                            Err(e) => {
-                                return Err(e);
-                            }
-                        }
-                    }
-                }
-            }
-
             // TODO atomic? store in tmp first and then move?
             // TODO should be after we create record in db
             if let Err(e) = chunker.save(&d.path, chunks).await {
                 error!("{:?}", e);
+                return Err(e);
             }
 
             let form = build_file_record(&d.path, storage_path, d.id, namespace_id)?;

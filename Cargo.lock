@@ -435,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "cooklang-sync-client"
-version = "0.1.6"
+version = "0.2.1"
 dependencies = [
  "async-stream",
  "diesel",
@@ -464,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "cooklang-sync-server"
-version = "0.1.6"
+version = "0.2.1"
 dependencies = [
  "async-notify",
  "diesel",

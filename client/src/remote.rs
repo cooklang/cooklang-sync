@@ -4,7 +4,7 @@ use uuid::Uuid;
 use log::trace;
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use reqwest::{multipart, StatusCode};
+use reqwest::{StatusCode};
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
 use futures::{Stream, StreamExt};
@@ -86,31 +86,56 @@ impl Remote {
         trace!(
             "uploading chunks {:?}",
             chunks
-                .clone()
-                .into_iter()
+                .iter()
                 .map(|(c, _)| c)
-                .collect::<Vec<String>>()
+                .collect::<Vec<_>>()
         );
 
-        // TODO make proper streaming
-        let mut form = multipart::Form::new();
+        // Generate a random boundary string
+        let boundary = format!("------------------------{}", Uuid::new_v4());
+        let mut headers = self.auth_headers();
+        headers.insert(
+            "content-type",
+            HeaderValue::from_str(&format!("multipart/form-data; boundary={}", &boundary)).unwrap(),
+        );
 
-        for (chunk, content) in chunks {
-            form = form.part(chunk, multipart::Part::bytes(content));
-        }
+        let final_boundary = format!("--{}--\r\n", &boundary).into_bytes();
+
+        // Create a stream of chunk data
+        let stream = futures::stream::iter(chunks).map(move |(chunk_id, content)| {
+            let part = format!(
+                "--{boundary}\r\n\
+                 Content-Disposition: form-data; name=\"{chunk_id}\"\r\n\
+                 Content-Type: application/octet-stream\r\n\r\n",
+                boundary = &boundary,
+                chunk_id = chunk_id
+            );
+
+            let end = "\r\n".to_string();
+
+            // Combine part header, content, and end into a single stream
+            futures::stream::iter(vec![
+                Ok::<_, SyncError>(part.into_bytes()),
+                Ok::<_, SyncError>(content),
+                Ok::<_, SyncError>(end.into_bytes()),
+            ])
+        }).flatten();
+
+        // Add final boundary
+
+        let stream = stream.chain(futures::stream::once(async move { Ok(final_boundary) }));
 
         let response = self
             .client
             .post(self.api_endpoint.clone() + "/chunks/upload")
-            .headers(self.auth_headers())
-            .multipart(form)
+            .headers(headers)
+            .body(reqwest::Body::wrap_stream(stream))
             .send()
             .await?;
 
         match response.status() {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            // TODO Don't need to error as it's sometimes fails??
             _ => Err(SyncError::Unknown),
         }
     }

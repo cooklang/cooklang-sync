@@ -32,6 +32,7 @@ impl Chunker {
     pub async fn hashify(&mut self, path: &str) -> Result<Vec<String>> {
         let p = Path::new(path);
 
+        // TODO probably there's a better way to check if file is binary
         if is_text(p) {
             self.hashify_text(path).await
         } else if is_binary(p) {
@@ -114,6 +115,7 @@ impl Chunker {
     pub async fn save(&mut self, path: &str, hashes: Vec<&str>) -> Result<()> {
         trace!("saving {:?}", path);
         let full_path = self.full_path(path);
+
         if let Some(parent) = full_path.parent() {
             create_dir_all(parent)
                 .await
@@ -146,7 +148,7 @@ impl Chunker {
         trace!("deleting {:?}", path);
         let full_path = self.full_path(path);
 
-        // TODO delete folders up too
+        // TODO delete folders up too if empty
         fs::remove_file(full_path)
             .await
             .map_err(|e| SyncError::from_io_error(path, e))?;

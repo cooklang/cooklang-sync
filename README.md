@@ -6,7 +6,6 @@ Suitable for syncing text files and not large (<10MB) binary files.
 
 ## Roadmap
 
-- Streaming
 - Garbage collection for client
 - Tests!
 - Need to generalise, now it’s too specific to our case

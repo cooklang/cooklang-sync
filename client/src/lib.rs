@@ -167,7 +167,7 @@ pub fn run_upload_once(
 }
 
 /// Runs local files watch and sync from/to remote continuously.
-async fn run_async(
+pub async fn run_async(
     storage_dir: &str,
     db_file_path: &str,
     api_endpoint: &str,

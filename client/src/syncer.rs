@@ -6,7 +6,7 @@ use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
 
-use log::{debug, error, trace, warn};
+use log::{debug, error, trace};
 
 use crate::chunker::Chunker;
 use crate::connection::{get_connection, ConnectionPool};
@@ -18,7 +18,6 @@ use crate::remote::{CommitResultStatus, Remote, REQUEST_TIMEOUT_SECS};
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
 const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
-const NO_INTERNET_SLEEP_SEC: Duration = Duration::from_secs(61);
 // TODO should be in sync in multiple places
 const MAX_UPLOAD_SIZE: usize = 3_000_000;
 

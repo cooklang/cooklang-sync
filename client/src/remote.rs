@@ -4,7 +4,7 @@ use uuid::Uuid;
 use log::trace;
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use reqwest::{StatusCode};
+use reqwest::StatusCode;
 use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
 
 use futures::{Stream, StreamExt};
@@ -85,10 +85,7 @@ impl Remote {
     pub async fn upload_batch(&self, chunks: Vec<(String, Vec<u8>)>) -> Result<()> {
         trace!(
             "uploading chunks {:?}",
-            chunks
-                .iter()
-                .map(|(c, _)| c)
-                .collect::<Vec<_>>()
+            chunks.iter().map(|(c, _)| c).collect::<Vec<_>>()
         );
 
         // Generate a random boundary string
@@ -102,24 +99,26 @@ impl Remote {
         let final_boundary = format!("--{}--\r\n", &boundary).into_bytes();
 
         // Create a stream of chunk data
-        let stream = futures::stream::iter(chunks).map(move |(chunk_id, content)| {
-            let part = format!(
-                "--{boundary}\r\n\
+        let stream = futures::stream::iter(chunks)
+            .map(move |(chunk_id, content)| {
+                let part = format!(
+                    "--{boundary}\r\n\
                  Content-Disposition: form-data; name=\"{chunk_id}\"\r\n\
                  Content-Type: application/octet-stream\r\n\r\n",
-                boundary = &boundary,
-                chunk_id = chunk_id
-            );
+                    boundary = &boundary,
+                    chunk_id = chunk_id
+                );
 
-            let end = "\r\n".to_string();
+                let end = "\r\n".to_string();
 
-            // Combine part header, content, and end into a single stream
-            futures::stream::iter(vec![
-                Ok::<_, SyncError>(part.into_bytes()),
-                Ok::<_, SyncError>(content),
-                Ok::<_, SyncError>(end.into_bytes()),
-            ])
-        }).flatten();
+                // Combine part header, content, and end into a single stream
+                futures::stream::iter(vec![
+                    Ok::<_, SyncError>(part.into_bytes()),
+                    Ok::<_, SyncError>(content),
+                    Ok::<_, SyncError>(end.into_bytes()),
+                ])
+            })
+            .flatten();
 
         // Add final boundary
 
@@ -312,7 +311,8 @@ impl Remote {
 fn extract_next_part(buffer: &[u8], boundary: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
     if let Some(start) = find_boundary(buffer, boundary) {
         if let Some(next_boundary) = find_boundary(&buffer[start + boundary.len()..], boundary) {
-            let part = buffer[start + boundary.len()..start + boundary.len() + next_boundary].to_vec();
+            let part =
+                buffer[start + boundary.len()..start + boundary.len() + next_boundary].to_vec();
             let remaining = buffer[start + boundary.len() + next_boundary..].to_vec();
             Ok(Some((part, remaining)))
         } else {
@@ -333,7 +333,9 @@ fn process_part(part: &[u8]) -> Result<Option<(String, Vec<u8>)>> {
             .lines()
             .find(|line| line.starts_with("X-Chunk-ID:"))
             .and_then(|line| line.split(": ").nth(1))
-            .ok_or(SyncError::BatchDownloadError("No chunk ID found".to_string()))?
+            .ok_or(SyncError::BatchDownloadError(
+                "No chunk ID found".to_string(),
+            ))?
             .trim()
             .to_string();
 
@@ -347,7 +349,8 @@ fn process_part(part: &[u8]) -> Result<Option<(String, Vec<u8>)>> {
 
 // Helper function to find boundary in buffer
 fn find_boundary(data: &[u8], boundary: &[u8]) -> Option<usize> {
-    data.windows(boundary.len()).position(|window| window == boundary)
+    data.windows(boundary.len())
+        .position(|window| window == boundary)
 }
 
 // Helper function to find double CRLF

@@ -82,13 +82,7 @@ async fn download_loop(
         {
             Ok(v) => v,
             Err(SyncError::Unauthorized) => return Err(SyncError::Unauthorized),
-            Err(_) => {
-                warn!("couldn't reach remote server. will try again soon...");
-
-                tokio::time::sleep(NO_INTERNET_SLEEP_SEC).await;
-
-                continue;
-            }
+            Err(_) => return Err(SyncError::Unknown),
         };
 
         // need to be longer than request timeout to make sure we don't get

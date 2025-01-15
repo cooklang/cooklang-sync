@@ -13,7 +13,7 @@ use crate::connection::{get_connection, ConnectionPool};
 use crate::errors::SyncError;
 use crate::models;
 use crate::registry;
-use crate::remote::{CommitResultStatus, Remote, REQUEST_TIMEOUT_SECS};
+use crate::remote::{CommitResultStatus, Remote};
 
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
@@ -86,7 +86,7 @@ async fn download_loop(
 
         // need to be longer than request timeout to make sure we don't get
         // client side timeout error
-        remote.poll(REQUEST_TIMEOUT_SECS + 10).await?;
+        remote.poll().await?;
     }
 }
 

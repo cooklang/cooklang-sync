@@ -182,8 +182,11 @@ impl Remote {
         }
     }
 
-    pub async fn poll(&self, seconds: u64) -> Result<()> {
+    pub async fn poll(&self) -> Result<()> {
         trace!("started poll");
+
+        // setting its larger than the request timeout to avoid timeouts from the server
+        let seconds = REQUEST_TIMEOUT_SECS + 10;
 
         let seconds_string = seconds.to_string();
 
@@ -205,8 +208,7 @@ impl Remote {
             Ok(response) => match response.status() {
                 StatusCode::OK => Ok(()),
                 StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-                // Don't need to error as it's expected to be cancelled from time to time
-                _ => Ok(()),
+                _ => Err(SyncError::Unknown),
             },
             Err(e) if e.is_timeout() => Ok(()), // Ignore timeout errors
             Err(e) => Err(e.into()),

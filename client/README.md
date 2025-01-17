@@ -113,7 +113,60 @@ Q:
 
 - empty files should be different from deleted
 
+Building binidngs
+=================
 
+### Prepare
+
+Install `rustup` https://www.rust-lang.org/tools/install.
+
+Then add iOS targets.
+
+    rustup target add aarch64-apple-ios
+    rustup target add x86_64-apple-ios
+
+Install iOS SDK https://developer.apple.com/xcode/resources/.
+
+### Build
+
+Build library:
+
+    cargo build --lib --target=x86_64-apple-ios --release
+    cargo build --lib --target=aarch64-apple-ios --release
+
+Biuld foreight language bindings (this will output Swift code into `./out` dir:
+
+    cargo run --features="uniffi/cli"  \
+      --bin uniffi-bindgen generate \
+      --config uniffi.toml \
+      --library ../target/x86_64-apple-ios/release/libcooklang_sync_client.a \
+      --language swift \
+      --out-dir out
+
+See example of a Xcode project [here](https://github.com/cooklang/cooklang-ios/blob/main/Cooklang.xcodeproj).
+
+Combine into universal library:
+
+    mkdir -p ../target/universal/release
+    mkdir -p ../target/universal_macos/release
+    lipo -create -output ../target/universal/release/libcooklang_sync_client.a \
+      ../target/x86_64-apple-ios/release/libcooklang_sync_client.a \
+      ../target/aarch64-apple-ios/release/libcooklang_sync_client.a
+
+    lipo -create -output ../target/universal_macos/release/libcooklang_sync_client.a \
+      ../target/x86_64-apple-darwin/release/libcooklang_sync_client.a \
+      ../target/aarch64-apple-darwin/release/libcooklang_sync_client.a
+
+
+    xcodebuild -create-xcframework \
+       -library ../target/aarch64-apple-ios/release/libcooklang_sync_client.a \
+       -library ../target/x86_64-apple-ios/release/libcooklang_sync_client.a \
+       -output CooklangSyncClientFFI.xcframework
+
+
+       cp ../target/universal/release/libcooklang_sync_client.a ../swift/CooklangSyncClientFFI.xcframework/ios-arm64/CooklangSyncClientFFI.framework/CooklangSyncClientFFI
+
+       cp ../target/universal/release/libcooklang_sync_client.a ../swift/CooklangSyncClientFFI.xcframework/ios-arm64_x86_64-simulator/CooklangSyncClientFFI.framework/CooklangSyncClient
 
 TODO
 ====

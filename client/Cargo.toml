@@ -1,6 +1,6 @@
 [package]
 name = "cooklang-sync-client"
-version = "0.2.5"
+version = "0.2.6"
 authors = ["Alexey Dubovskoy <alexey@cooklang.org>"]
 edition = "2021"
 description = "A client library for cooklang-sync"
@@ -41,6 +41,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 reqwest-middleware = "0.2"
 jsonwebtoken = "9"
 async-stream = "0.3"
+path-slash = "0.2.1"
 
 
 [[bin]]

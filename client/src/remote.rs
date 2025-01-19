@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use std::path::Path;
+use path_slash::PathExt as _;
 
 use log::trace;
 
@@ -223,10 +225,12 @@ impl Remote {
     ) -> Result<CommitResultStatus> {
         trace!("commit {:?}", path);
 
+        let path = Path::new(path);
+
         let params = [
             ("deleted", if deleted { "true" } else { "false" }),
             ("chunk_ids", chunk_ids),
-            ("path", path),
+            ("path", &path.to_slash().unwrap()),
         ];
 
         let response = self

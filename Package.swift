@@ -26,7 +26,7 @@ var package = Package(
         .binaryTarget(
             name: "CooklangSyncClientFFI",
             url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.2.5/CooklangSyncClientFFI.xcframework.zip",
-            checksum: "330dee190d62d1784fd458653e6d94191773f6747a591358b29373f50b666805"),
+            checksum: "1f52679045e61166d3084d18366f2a8928adee3fefa442c1bebe5f20564861f3"),
     ]
 )
 

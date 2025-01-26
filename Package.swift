@@ -3,7 +3,7 @@ import PackageDescription
 import class Foundation.ProcessInfo
 
 var package = Package(
-    name: "cooklang-rs",
+    name: "cooklang-sync-client",
     platforms: [
         .macOS(.v10_15),
         .iOS(.v15),

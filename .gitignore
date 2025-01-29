@@ -6,3 +6,6 @@
 **/*.sqlite3
 **/*.sqlite3-*
 out
+*.xcframework
+*.xcframework.zip
+*.xcframework.zip.sha256

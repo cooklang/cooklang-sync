@@ -5,13 +5,12 @@ import class Foundation.ProcessInfo
 var package = Package(
     name: "cooklang-sync-client",
     platforms: [
-        .macOS(.v10_15),
         .iOS(.v15),
     ],
     products: [
         .library(
             name: "CooklangSyncClient",
-            targets: ["CooklangSyncClient"]),
+            targets: ["CooklangSyncClient", "CooklangSyncClientFFI"]),
     ],
     dependencies: [
     ],
@@ -19,10 +18,6 @@ var package = Package(
         .target(
             name: "CooklangSyncClient",
             path: "swift/Sources/CooklangSyncClient"),
-        .testTarget(
-            name: "CooklangSyncClientTests",
-            dependencies: ["CooklangSyncClient"],
-            path: "swift/Tests/CooklangSyncClientTests"),
         .binaryTarget(
             name: "CooklangSyncClientFFI",
             url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.2.6/CooklangSyncClientFFI.xcframework.zip",

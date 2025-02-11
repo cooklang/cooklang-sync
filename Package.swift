@@ -20,8 +20,8 @@ var package = Package(
             path: "swift/Sources/CooklangSyncClient"),
         .binaryTarget(
             name: "CooklangSyncClientFFI",
-            url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.2.7/CooklangSyncClientFFI.xcframework.zip",
-            checksum: "b761b18119165f5efa041ce0459e6548db50ed11f07fa893715a73517059bf56"),
+            url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.2.8/CooklangSyncClientFFI.xcframework.zip",
+            checksum: "bbae4f0e29650f46c315177c628b05d86adbf11972394b46b4af28c40309b6ea"),
     ]
 )
 

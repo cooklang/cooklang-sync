@@ -116,7 +116,7 @@ infoplist() {
   if [ ! -f "$plist" ]; then
     /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string en" "$plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string $FRAMEWORK" "$plist"
-    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string build.wallet.rust.$LIB" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.cooklang.$LIB" "$plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundleInfoDictionaryVersion string 6.0" "$plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string FMWK" "$plist"
     # The following values are required. Without them, the App Store will return an "Asset validation failed" error.
@@ -167,6 +167,6 @@ BUILD_TARGET=$RUST_BUILD_DIRECTORY/target
 
 clean
 framework ios aarch64-apple-ios
-framework ios-sim $(find_sim_triple)
+framework ios-sim aarch64-apple-ios-sim x86_64-apple-ios
 xcframework ios ios-sim
 clean

@@ -14,7 +14,12 @@ use futures::{Stream, StreamExt};
 use crate::errors::SyncError;
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
+use tokio::time::{sleep, Duration};
+
 pub const REQUEST_TIMEOUT_SECS: u64 = 60;
+
+const MAX_RETRIES: u32 = 3;
+const INITIAL_RETRY_DELAY: Duration = Duration::from_secs(1);
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ResponseFileRecord {
@@ -55,8 +60,7 @@ impl Remote {
             client,
         }
     }
-}
-impl Remote {
+
     fn auth_headers(&self) -> HeaderMap {
         let auth_value = format!("Bearer {}", self.token);
 
@@ -64,6 +68,37 @@ impl Remote {
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value).unwrap());
 
         headers
+    }
+
+    async fn make_request_with_retry<F, T>(&self, request_fn: F) -> Result<T>
+    where
+        F: Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<T>> + Send + 'static>>,
+    {
+        let mut retries = 0;
+        let mut delay = INITIAL_RETRY_DELAY;
+
+        loop {
+            let future = request_fn();
+            match future.await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    if retries >= MAX_RETRIES {
+                        return Err(e);
+                    }
+
+                    // Only retry on network-related errors
+                    if let SyncError::ReqwestError(_) | SyncError::ReqwestWirhMiddlewareError(_) = e {
+                        log::warn!("Request failed, retrying in {:?} (attempt {}/{}): {:?}",
+                            delay, retries + 1, MAX_RETRIES, e);
+                        sleep(delay).await;
+                        retries += 1;
+                        delay *= 2; // Exponential backoff
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
     }
 
     pub async fn upload(&self, chunk: &str, content: Vec<u8>) -> Result<()> {
@@ -163,58 +198,72 @@ impl Remote {
 
     pub async fn list(&self, local_jid: i32) -> Result<Vec<ResponseFileRecord>> {
         trace!("list after {:?}", local_jid);
-
         let jid_string = local_jid.to_string();
+        let endpoint = self.api_endpoint.clone();
+        let headers = self.auth_headers();
 
-        let response = self
-            .client
-            .get(self.api_endpoint.clone() + "/metadata/list?jid=" + &jid_string)
-            .headers(self.auth_headers())
-            .send()
-            .await?;
+        self.make_request_with_retry(|| {
+            let endpoint = endpoint.clone();
+            let jid_string = jid_string.clone();
+            let headers = headers.clone();
 
-        match response.status() {
-            StatusCode::OK => {
-                let records = response.json::<Vec<ResponseFileRecord>>().await?;
+            Box::pin(async move {
+                let response = reqwest::Client::new()
+                    .get(endpoint + "/metadata/list?jid=" + &jid_string)
+                    .headers(headers)
+                    .send()
+                    .await?;
 
-                Ok(records)
-            }
-            StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => Err(SyncError::Unknown),
-        }
+                match response.status() {
+                    StatusCode::OK => {
+                        let records = response.json::<Vec<ResponseFileRecord>>().await?;
+                        Ok(records)
+                    }
+                    StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+                    _ => Err(SyncError::Unknown),
+                }
+            })
+        }).await
     }
 
     pub async fn poll(&self) -> Result<()> {
         trace!("started poll");
-
-        // setting its larger than the request timeout to avoid timeouts from the server
         let seconds = REQUEST_TIMEOUT_SECS + 10;
-
         let seconds_string = seconds.to_string();
+        let endpoint = self.api_endpoint.clone();
+        let headers = self.auth_headers();
+        let uuid = self.uuid.clone();
 
-        let response = self
-            .client
-            .get(
-                self.api_endpoint.clone()
-                    + "/metadata/poll?seconds="
-                    + &seconds_string
-                    + "&uuid="
-                    + &self.uuid,
-            )
-            .headers(self.auth_headers())
-            .send()
-            .await;
+        self.make_request_with_retry(|| {
+            let endpoint = endpoint.clone();
+            let seconds_string = seconds_string.clone();
+            let headers = headers.clone();
+            let uuid = uuid.clone();
 
-        // Handle the response, ignoring timeout errors
-        match response {
-            Ok(response) => match response.status() {
-                StatusCode::OK => Ok(()),
-                StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-                _ => Err(SyncError::Unknown),
-            },
-            Err(e) if e.is_timeout() => Ok(()), // Ignore timeout errors
-            Err(e) => Err(e.into()),
-        }
+            Box::pin(async move {
+                let response = reqwest::Client::new()
+                    .get(
+                        endpoint
+                            + "/metadata/poll?seconds="
+                            + &seconds_string
+                            + "&uuid="
+                            + &uuid,
+                    )
+                    .headers(headers)
+                    .send()
+                    .await;
+
+                match response {
+                    Ok(response) => match response.status() {
+                        StatusCode::OK => Ok(()),
+                        StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+                        _ => Err(SyncError::Unknown),
+                    },
+                    Err(e) if e.is_timeout() => Ok(()), // Ignore timeout errors
+                    Err(e) => Err(e.into()),
+                }
+            })
+        }).await
     }
 
     pub async fn commit(

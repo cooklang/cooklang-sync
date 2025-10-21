@@ -1,6 +1,4 @@
-use jsonwebtoken::{
-    decode, errors::ErrorKind, Algorithm, DecodingKey, Validation,
-};
+use jsonwebtoken::{decode, errors::ErrorKind, Algorithm, DecodingKey, Validation};
 
 use rocket::serde::{Deserialize, Serialize};
 

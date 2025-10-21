@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
-use std::path::Path;
 use path_slash::PathExt as _;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use uuid::Uuid;
 
 use log::trace;
 

@@ -230,6 +230,18 @@ pub fn is_binary(p: &Path) -> bool {
 }
 
 pub fn is_text(p: &Path) -> bool {
+    // Check for specific filenames without extensions
+    if let Some(file_name) = p.file_name() {
+        let file_name_str = file_name.to_string_lossy();
+        if file_name_str == ".shopping-list"
+            || file_name_str == ".shopping-checked"
+            || file_name_str == ".bookmarks"
+        {
+            return true;
+        }
+    }
+
+    // Check for file extensions
     if let Some(ext) = p.extension() {
         let ext = ext.to_ascii_lowercase();
 
@@ -238,7 +250,9 @@ pub fn is_text(p: &Path) -> bool {
             || ext == "yaml"
             || ext == "yml"
             || ext == "md"
-            || ext == "cplan"
+            || ext == "menu"
+            || ext == "jinja"
+            || ext == "j2"
     } else {
         false
     }

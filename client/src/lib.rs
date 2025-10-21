@@ -36,7 +36,7 @@ pub fn extract_uid_from_jwt(token: &str) -> i32 {
     // Disabling signature validation because we don't know real secret
     validation.insecure_disable_signature_validation();
 
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     struct Claims {
         uid: i32,
     }
@@ -78,10 +78,7 @@ pub fn run(
 /// Note, it doesn't do the update itself, you need to use `run_download_once`
 /// after this function completes.
 #[uniffi::export]
-pub fn wait_remote_update(
-    api_endpoint: &str,
-    remote_token: &str
-) -> Result<(), errors::SyncError> {
+pub fn wait_remote_update(api_endpoint: &str, remote_token: &str) -> Result<(), errors::SyncError> {
     Runtime::new()?.block_on(remote::Remote::new(api_endpoint, remote_token).poll())?;
 
     Ok(())

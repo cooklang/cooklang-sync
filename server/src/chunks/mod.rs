@@ -139,11 +139,15 @@ struct ChunkIds<'a>(Vec<ChunkId<'a>>);
 async fn download_chunks(
     chunk_ids: Form<ChunkIds<'_>>,
 ) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
-    let cloned_chunk_ids: Vec<_> = chunk_ids.0.iter().map(|chunk_id| {
-        let id = chunk_id.id().to_string(); // Assuming id is of type &str
-        let file_path = chunk_id.file_path(); // Assuming file_path is of type &str
-        (id, file_path)
-    }).collect();
+    let cloned_chunk_ids: Vec<_> = chunk_ids
+        .0
+        .iter()
+        .map(|chunk_id| {
+            let id = chunk_id.id().to_string(); // Assuming id is of type &str
+            let file_path = chunk_id.file_path(); // Assuming file_path is of type &str
+            (id, file_path)
+        })
+        .collect();
 
     MultipartStream::new_random(stream! {
         for (id, file_path) in cloned_chunk_ids {

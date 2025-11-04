@@ -20,8 +20,8 @@ var package = Package(
             path: "swift/Sources/CooklangSyncClient"),
         .binaryTarget(
             name: "CooklangSyncClientFFI",
-            url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.2.8/CooklangSyncClientFFI.xcframework.zip",
-            checksum: "bbae4f0e29650f46c315177c628b05d86adbf11972394b46b4af28c40309b6ea"),
+            url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.2.10/CooklangSyncClientFFI.xcframework.zip",
+            checksum: "6af279cb1417dbba1044228e016b658fcf3952abc058496319f592def831362e"),
     ]
 )
 
@@ -32,7 +32,7 @@ if ProcessInfo.processInfo.environment["USE_LOCAL_XCFRAMEWORK"] == nil {
 } else {
     package.targets.append(.binaryTarget(
         name: "CooklangSyncClientFFI_local",
-        path: "bindings/out/CooklangSyncClientFFI.xcframework"))
+        path: "swift/CooklangSyncClientFFI.xcframework"))
 
     cooklangSyncClientTarget?.dependencies.append("CooklangSyncClientFFI_local")
 }

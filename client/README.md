@@ -113,7 +113,7 @@ Q:
 
 - empty files should be different from deleted
 
-Building binidngs
+Building bindings
 =================
 
 ### Prepare
@@ -124,17 +124,49 @@ Then add iOS targets.
 
     rustup target add aarch64-apple-ios
     rustup target add x86_64-apple-ios
+    rustup target add aarch64-apple-ios-sim
 
 Install iOS SDK https://developer.apple.com/xcode/resources/.
 
-### Build
+### Build XCFramework (Recommended)
+
+The easiest way to build the Swift bindings is to use the provided build script:
+
+    cd client
+    ./scripts/build_swift_framework.sh cooklang-sync-client cooklang_sync_client CooklangSyncClientFFI
+
+This will:
+- Build the Rust library for iOS device and simulator targets
+- Generate Swift bindings using UniFFI
+- Create a universal XCFramework at `../swift/CooklangSyncClientFFI.xcframework`
+- Set a valid CFBundleIdentifier (converts underscores to hyphens: `org.cooklang.cooklang-sync-client`)
+- Create a zip archive of the XCFramework
+- Calculate the SHA-256 checksum
+- Automatically update `Package.swift` with the current version (from `Cargo.toml`) and checksum
+
+**Note**: Apple's CFBundleIdentifier must only contain alphanumeric characters, hyphens, and periods.
+The build script automatically converts underscores in the library name to hyphens to comply with this requirement.
+
+After building, the script will display the version, checksum, and instructions for publishing a release.
+
+### Using the Local XCFramework
+
+To use the locally built XCFramework with the Swift Package instead of the remote release version, set the `USE_LOCAL_XCFRAMEWORK` environment variable:
+
+```bash
+export USE_LOCAL_XCFRAMEWORK=1
+```
+
+Then in your Xcode project that depends on this package, clean and rebuild. The Package.swift will automatically use the local XCFramework at `swift/CooklangSyncClientFFI.xcframework` instead of downloading from GitHub releases.
+
+### Manual Build (Advanced)
 
 Build library:
 
     cargo build --lib --target=x86_64-apple-ios --release
     cargo build --lib --target=aarch64-apple-ios --release
 
-Biuld foreight language bindings (this will output Swift code into `./out` dir:
+Build foreign language bindings (this will output Swift code into `./out` dir):
 
     cargo run --features="uniffi/cli"  \
       --bin uniffi-bindgen generate \

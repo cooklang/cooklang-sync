@@ -1,4 +1,13 @@
 #!/bin/bash
+#
+# Build Swift XCFramework from Rust library using UniFFI
+#
+# Usage: ./build_swift_framework.sh <package-name> <lib-name> <framework-name>
+#
+# Example: ./build_swift_framework.sh cooklang-sync-client cooklang_sync_client CooklangSyncClientFFI
+#
+# Note: The lib-name may contain underscores, but the CFBundleIdentifier will
+# automatically convert them to hyphens to comply with Apple's naming requirements.
 
 set -euo pipefail
 
@@ -113,10 +122,13 @@ infoplist() {
 
   echo "Creating Info.plist for $plist"
 
+  # Replace underscores with hyphens for valid bundle identifier
+  local bundle_id=$(echo "$LIB" | tr '_' '-')
+
   if [ ! -f "$plist" ]; then
     /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string en" "$plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string $FRAMEWORK" "$plist"
-    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.cooklang.$LIB" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.cooklang.$bundle_id" "$plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundleInfoDictionaryVersion string 6.0" "$plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string FMWK" "$plist"
     # The following values are required. Without them, the App Store will return an "Asset validation failed" error.
@@ -161,6 +173,53 @@ clean() {
     rm -rf $RUST_BUILD_DIRECTORY/swift/.build/
 }
 
+get_version() {
+    # Extract version from Cargo.toml
+    grep -m1 '^version = ' "$RUST_ROOT/client/Cargo.toml" | sed 's/version = "\(.*\)"/\1/'
+}
+
+zip_xcframework() {
+    local xcframework_path=$RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework
+    local zip_path=$RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework.zip
+
+    echo "Creating zip archive..."
+    [ -f "$zip_path" ] && rm "$zip_path"
+
+    (cd "$RUST_BUILD_DIRECTORY/swift" && zip -r "$FRAMEWORK.xcframework.zip" "$FRAMEWORK.xcframework")
+
+    echo "Zip created at: $zip_path"
+}
+
+calculate_checksum() {
+    local zip_path=$RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework.zip
+
+    echo "Calculating checksum..." >&2
+    shasum -a 256 "$zip_path" | awk '{print $1}'
+}
+
+update_package_swift() {
+    local version=$1
+    local checksum=$2
+    local package_swift=$RUST_ROOT/Package.swift
+
+    echo "Updating Package.swift with version $version and checksum $checksum"
+
+    # Create a temporary file
+    local temp_file=$(mktemp)
+
+    # Update the URL and checksum in Package.swift
+    # Note: macOS sed doesn't support {n} repetition, so we use a longer pattern
+    sed -E \
+        -e "s|url: \"https://github.com/cooklang/cooklang-sync/releases/download/client-v[0-9]+\.[0-9]+\.[0-9]+/CooklangSyncClientFFI\.xcframework\.zip\"|url: \"https://github.com/cooklang/cooklang-sync/releases/download/client-v${version}/CooklangSyncClientFFI.xcframework.zip\"|" \
+        -e "s|checksum: \"[a-f0-9][a-f0-9]*\"|checksum: \"${checksum}\"|" \
+        "$package_swift" > "$temp_file"
+
+    # Replace the original file
+    mv "$temp_file" "$package_swift"
+
+    echo "Package.swift updated successfully"
+}
+
 find_root
 RUST_BUILD_DIRECTORY=$RUST_ROOT
 BUILD_TARGET=$RUST_BUILD_DIRECTORY/target
@@ -169,4 +228,25 @@ clean
 framework ios aarch64-apple-ios
 framework ios-sim aarch64-apple-ios-sim x86_64-apple-ios
 xcframework ios ios-sim
+
+# Zip the XCFramework and update Package.swift
+VERSION=$(get_version)
+zip_xcframework
+CHECKSUM=$(calculate_checksum)
+update_package_swift "$VERSION" "$CHECKSUM"
+
+echo ""
+echo "=========================================="
+echo "Build completed successfully!"
+echo "=========================================="
+echo "Version: $VERSION"
+echo "Checksum: $CHECKSUM"
+echo "XCFramework: $RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework"
+echo "Zip: $RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework.zip"
+echo ""
+echo "Package.swift has been updated with the new version and checksum."
+echo "To publish, create a GitHub release with tag 'client-v$VERSION' and upload:"
+echo "  $RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework.zip"
+echo "=========================================="
+
 clean

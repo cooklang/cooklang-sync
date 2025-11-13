@@ -4,11 +4,13 @@ use futures::{
 };
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use walkdir::WalkDir;
 
 use notify_debouncer_mini::DebounceEventResult;
 use time::OffsetDateTime;
 use tokio::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 use log::debug;
 
@@ -17,6 +19,7 @@ use crate::connection::{get_connection, ConnectionPool};
 use crate::errors::SyncError;
 use crate::models::*;
 use crate::registry;
+use crate::SyncStatusListener;
 
 type DBFiles = HashMap<String, FileRecord>;
 type DiskFiles = HashMap<String, CreateForm>;
@@ -31,6 +34,8 @@ const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(61);
 ///
 /// It runs both on interval and on any event coming from FS watcher.
 pub async fn run(
+    token: CancellationToken,
+    _listener: Option<Arc<dyn SyncStatusListener>>,
     pool: &ConnectionPool,
     storage_path: &Path,
     namespace_id: i32,
@@ -38,15 +43,27 @@ pub async fn run(
     mut updated_tx: Sender<IndexerUpdateEvent>,
 ) -> Result<(), SyncError> {
     loop {
+        // Check for cancellation at loop start
+        if token.is_cancelled() {
+            debug!("Indexer received shutdown signal");
+            break;
+        }
+
         if check_index_once(pool, storage_path, namespace_id)? {
             updated_tx.send(IndexerUpdateEvent::Updated).await?;
         }
 
         tokio::select! {
+            _ = token.cancelled() => {
+                debug!("Indexer shutting down");
+                break;
+            }
             _ = tokio::time::sleep(CHECK_INTERVAL_WAIT_SEC) => {},
             Some(_) = local_file_update_rx.next() => {},
         };
     }
+
+    Ok(())
 }
 
 pub fn check_index_once(

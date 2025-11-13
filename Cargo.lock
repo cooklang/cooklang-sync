@@ -458,6 +458,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "tokio-util",
  "uniffi",
  "uuid",
  "walkdir",

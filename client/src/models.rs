@@ -86,3 +86,11 @@ impl PartialEq<CreateForm> for FileRecord {
         self.path == other.path && self.size == other.size && self.modified_at == other.modified_at
     }
 }
+
+/// Sync status enum for communicating sync state to external callers
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum SyncStatus {
+    Idle,
+    Syncing,
+    Error { message: String },
+}

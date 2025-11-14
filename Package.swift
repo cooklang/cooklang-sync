@@ -18,14 +18,14 @@ if useLocalXCFramework {
 } else {
     targets.append(.binaryTarget(
         name: "CooklangSyncClientFFI",
-        url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.2.11/CooklangSyncClientFFI.xcframework.zip",
-        checksum: "3e70aed561d16813e951af2dfe4c939ffea979aee22b979a1eab1f66903c9fda"))
+        url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.3.0/CooklangSyncClientFFI.xcframework.zip",
+        checksum: "da07f5db9740969092f534b9c3e9e465700af13498a5a4c49c1ae5dfce2c7817"))
 }
 
 let package = Package(
     name: "cooklang-sync-client",
     platforms: [
-        .iOS(.v15),
+        .iOS(.v16),
     ],
     products: [
         .library(

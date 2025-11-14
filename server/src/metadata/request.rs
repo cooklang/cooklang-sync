@@ -13,7 +13,7 @@ pub(crate) struct CommitPayload<'r> {
 }
 
 impl<'a> CommitPayload<'a> {
-    pub(crate) fn non_local_chunks(&self) -> Vec<ChunkId> {
+    pub(crate) fn non_local_chunks(&self) -> Vec<ChunkId<'_>> {
         let desired: Vec<&str> = self.chunk_ids.split(',').collect();
 
         desired

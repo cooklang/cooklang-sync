@@ -57,7 +57,7 @@ async fn upload_chunks_deprecated(
                 panic!("Error reading chunk");
             }
         } {
-            file.write_all(&chunk).await.map_err(|_| {
+            let _ = file.write_all(&chunk).await.map_err(|_| {
                 std::fs::remove_file(&full_path).ok();
             });
         }
@@ -103,7 +103,7 @@ async fn upload_chunks(
                 panic!("Error reading chunk");
             }
         } {
-            file.write_all(&chunk).await.map_err(|_| {
+            let _ = file.write_all(&chunk).await.map_err(|_| {
                 std::fs::remove_file(&full_path).ok();
             });
         }

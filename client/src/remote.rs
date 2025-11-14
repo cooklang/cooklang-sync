@@ -80,7 +80,10 @@ impl Remote {
         match response.status() {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => Err(SyncError::Unknown),
+            status => Err(SyncError::Unknown(format!(
+                "Upload chunk failed with status: {}",
+                status
+            ))),
         }
     }
 
@@ -137,7 +140,10 @@ impl Remote {
         match response.status() {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => Err(SyncError::Unknown),
+            status => Err(SyncError::Unknown(format!(
+                "Upload batch failed with status: {}",
+                status
+            ))),
         }
     }
 
@@ -157,7 +163,10 @@ impl Remote {
                 Err(_) => Err(SyncError::BodyExtractError),
             },
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => Err(SyncError::Unknown),
+            status => Err(SyncError::Unknown(format!(
+                "Download chunk failed with status: {}",
+                status
+            ))),
         }
     }
 
@@ -180,7 +189,10 @@ impl Remote {
                 Ok(records)
             }
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => Err(SyncError::Unknown),
+            status => Err(SyncError::Unknown(format!(
+                "List metadata failed with status: {}",
+                status
+            ))),
         }
     }
 
@@ -210,7 +222,10 @@ impl Remote {
             Ok(response) => match response.status() {
                 StatusCode::OK => Ok(()),
                 StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-                _ => Err(SyncError::Unknown),
+                status => Err(SyncError::Unknown(format!(
+                    "Poll metadata failed with status: {}",
+                    status
+                ))),
             },
             Err(e) if e.is_timeout() => Ok(()), // Ignore timeout errors
             Err(e) => Err(e.into()),
@@ -248,7 +263,10 @@ impl Remote {
                 Ok(records)
             }
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
-            _ => Err(SyncError::Unknown),
+            status => Err(SyncError::Unknown(format!(
+                "Commit metadata failed with status: {}",
+                status
+            ))),
         }
     }
 
@@ -307,7 +325,7 @@ impl Remote {
                     }
                 }
                 StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized)?,
-                _ => Err(SyncError::Unknown)?,
+                status => Err(SyncError::Unknown(format!("Download batch failed with status: {}", status)))?,
             }
         })
     }

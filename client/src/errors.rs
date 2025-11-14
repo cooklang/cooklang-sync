@@ -37,8 +37,8 @@ pub enum SyncError {
     GetFromCacheError,
     #[error("Unlisted file format {0}")]
     UnlistedFileFormat(String),
-    #[error("Unknown error")]
-    Unknown,
+    #[error("Unknown error: {0}")]
+    Unknown(String),
     #[error("Batch download error {0}")]
     BatchDownloadError(String),
 }

@@ -1,3 +1,4 @@
+use cooklang_sync_client::SyncContext;
 use log::trace;
 
 fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
@@ -13,8 +14,13 @@ fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
 
         let namespace_id = cooklang_sync_client::extract_uid_from_jwt(client_token);
         trace!("namespace_id: {:?}", namespace_id);
+
+        // Create a sync context for the new API
+        let context = SyncContext::new();
+
         // TODO refactor that it checks if argument requesting continues or one off sync
         cooklang_sync_client::run(
+            context,
             monitor_path,
             db_path,
             api_endpoint,

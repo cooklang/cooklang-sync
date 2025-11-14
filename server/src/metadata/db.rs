@@ -14,11 +14,11 @@ type DbConnection = diesel::PgConnection;
 #[database("metadata")]
 pub(crate) struct Db(DbConnection);
 
-#[cfg(all(feature = "database_postgres"))]
+#[cfg(feature = "database_postgres")]
 #[allow(dead_code)]
 pub type DieselBackend = diesel::pg::Pg;
 
-#[cfg(all(feature = "database_sqlite"))]
+#[cfg(feature = "database_sqlite")]
 #[allow(dead_code)]
 pub type DieselBackend = diesel::sqlite::Sqlite;
 

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
+use tokio_util::sync::CancellationToken;
 
 use log::debug;
 
@@ -21,6 +22,7 @@ const DUMMY_SECRET: &[u8] = b"dummy_secret";
 
 pub mod chunker;
 pub mod connection;
+pub mod context;
 pub mod errors;
 pub mod file_watcher;
 pub mod indexer;
@@ -29,6 +31,10 @@ pub mod registry;
 pub mod remote;
 pub mod schema;
 pub mod syncer;
+
+// Export SyncStatus and context types for external use
+pub use context::{SyncContext, SyncStatusListener};
+pub use models::SyncStatus;
 
 pub fn extract_uid_from_jwt(token: &str) -> i32 {
     let mut validation = Validation::new(Algorithm::HS256);
@@ -54,6 +60,7 @@ uniffi::setup_scaffolding!();
 /// Intended to used by external (written in other languages) callers.
 #[uniffi::export]
 pub fn run(
+    context: Arc<SyncContext>,
     storage_dir: &str,
     db_file_path: &str,
     api_endpoint: &str,
@@ -61,7 +68,12 @@ pub fn run(
     namespace_id: i32,
     download_only: bool,
 ) -> Result<(), errors::SyncError> {
+    let token = context.token();
+    let listener = context.listener();
+
     Runtime::new()?.block_on(run_async(
+        token,
+        listener,
         storage_dir,
         db_file_path,
         api_endpoint,
@@ -163,7 +175,10 @@ pub fn run_upload_once(
 }
 
 /// Runs local files watch and sync from/to remote continuously.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_async(
+    token: CancellationToken,
+    listener: Option<Arc<dyn SyncStatusListener>>,
     storage_dir: &str,
     db_file_path: &str,
     api_endpoint: &str,
@@ -171,6 +186,7 @@ pub async fn run_async(
     namespace_id: i32,
     download_only: bool,
 ) -> Result<(), errors::SyncError> {
+    // Initialize all components first
     let (mut debouncer, local_file_update_rx) = async_watcher()?;
     let (local_registry_updated_tx, local_registry_updated_rx) = channel(CHANNEL_SIZE);
 
@@ -189,7 +205,14 @@ pub async fn run_async(
         debug!("Started watcher on {:?}", storage_dir);
     }
 
+    // Notify syncing status after successful initialization
+    if let Some(ref cb) = listener {
+        cb.on_status_changed(SyncStatus::Syncing);
+    }
+
     let indexer = indexer::run(
+        token.clone(),
+        listener.clone(),
         &pool,
         storage_dir,
         namespace_id,
@@ -199,6 +222,8 @@ pub async fn run_async(
     debug!("Started indexer on {:?}", storage_dir);
 
     let syncer = syncer::run(
+        token.clone(),
+        listener.clone(),
         &pool,
         storage_dir,
         namespace_id,
@@ -209,7 +234,16 @@ pub async fn run_async(
     );
     debug!("Started syncer");
 
-    let _ = try_join!(indexer, syncer)?;
+    let result = try_join!(indexer, syncer);
 
+    // Notify completion (on_complete includes success status and optional error message)
+    if let Some(ref cb) = listener {
+        match result {
+            Ok(_) => cb.on_complete(true, None),
+            Err(ref e) => cb.on_complete(false, Some(format!("{:?}", e))),
+        }
+    }
+
+    result?;
     Ok(())
 }

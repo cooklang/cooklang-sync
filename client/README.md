@@ -113,6 +113,153 @@ Q:
 
 - empty files should be different from deleted
 
+## Usage (iOS/Swift)
+
+### Installation
+
+Add the package to your Xcode project:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/cooklang/cooklang-sync.git", from: "0.3.0")
+]
+```
+
+### Basic Example
+
+```swift
+import CooklangSyncClient
+import Foundation
+
+// 1. Create a status listener to receive sync updates
+class MySyncListener: SyncStatusListener {
+    func onStatusChanged(status: SyncStatus) {
+        print("Sync status: \(status)")
+    }
+
+    func onComplete(success: Bool, message: String?) {
+        print("Sync completed. Success: \(success), Message: \(message ?? "none")")
+    }
+}
+
+// 2. Set up sync context
+let context = SyncContext()
+let listener = MySyncListener()
+context.setListener(listener: listener)
+
+// 3. Configure sync parameters
+let storageDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    .appendingPathComponent("recipes")
+    .path
+let dbFilePath = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    .appendingPathComponent("sync.db")
+    .path
+let apiEndpoint = "https://api.cooklang.org"
+let remoteToken = "your_jwt_token_here"
+let namespaceId: Int32 = 1
+
+// 4. Run continuous sync (watches for file changes and syncs automatically)
+Task {
+    do {
+        try run(
+            context: context,
+            storageDir: storageDir,
+            dbFilePath: dbFilePath,
+            apiEndpoint: apiEndpoint,
+            remoteToken: remoteToken,
+            namespaceId: namespaceId,
+            downloadOnly: false  // Set to true for read-only sync
+        )
+    } catch {
+        print("Sync error: \(error)")
+    }
+}
+
+// 5. Cancel sync when needed
+context.cancel()
+```
+
+### One-Time Sync Operations
+
+For manual control over sync operations:
+
+```swift
+// Download updates from server (one-time)
+Task {
+    do {
+        try runDownloadOnce(
+            storageDir: storageDir,
+            dbFilePath: dbFilePath,
+            apiEndpoint: apiEndpoint,
+            remoteToken: remoteToken,
+            namespaceId: namespaceId
+        )
+        print("Download completed")
+    } catch {
+        print("Download error: \(error)")
+    }
+}
+
+// Upload local changes to server (one-time)
+Task {
+    do {
+        try runUploadOnce(
+            storageDir: storageDir,
+            dbFilePath: dbFilePath,
+            apiEndpoint: apiEndpoint,
+            remoteToken: remoteToken,
+            namespaceId: namespaceId
+        )
+        print("Upload completed")
+    } catch {
+        print("Upload error: \(error)")
+    }
+}
+```
+
+### Advanced: Wait for Remote Updates
+
+Use this to implement efficient background sync with server-sent events:
+
+```swift
+// Wait for remote updates, then download
+Task {
+    do {
+        // This blocks until server notifies of changes or timeout
+        try waitRemoteUpdate(apiEndpoint: apiEndpoint, remoteToken: remoteToken)
+
+        // Now download the updates
+        try runDownloadOnce(
+            storageDir: storageDir,
+            dbFilePath: dbFilePath,
+            apiEndpoint: apiEndpoint,
+            remoteToken: remoteToken,
+            namespaceId: namespaceId
+        )
+    } catch {
+        print("Error: \(error)")
+    }
+}
+```
+
+### Sync Status Values
+
+The `SyncStatus` enum includes:
+- `.idle` - Not syncing
+- `.syncing` - Sync operation in progress
+- `.uploading` - Currently uploading to server
+- `.downloading` - Currently downloading from server
+- `.error` - Sync encountered an error
+
+### Best Practices
+
+1. **Database Location**: Store the database in Application Support directory to persist across app updates
+2. **Storage Directory**: Use a dedicated subdirectory in Documents for synced files
+3. **Background Sync**: On iOS, use Background Tasks API to run periodic syncs
+4. **Error Handling**: Always handle `SyncError` exceptions and notify users appropriately
+5. **Cancellation**: Call `context.cancel()` before app termination to clean up resources
+6. **Read-Only Mode**: Set `downloadOnly: true` if you want to prevent local changes from syncing to server
+
 Building bindings
 =================
 

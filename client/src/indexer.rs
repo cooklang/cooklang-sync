@@ -19,7 +19,7 @@ use crate::connection::{get_connection, ConnectionPool};
 use crate::errors::SyncError;
 use crate::models::*;
 use crate::registry;
-use crate::SyncStatusListener;
+use crate::{SyncStatus, SyncStatusListener};
 
 type DBFiles = HashMap<String, FileRecord>;
 type DiskFiles = HashMap<String, CreateForm>;
@@ -35,7 +35,7 @@ const CHECK_INTERVAL_WAIT_SEC: Duration = Duration::from_secs(61);
 /// It runs both on interval and on any event coming from FS watcher.
 pub async fn run(
     token: CancellationToken,
-    _listener: Option<Arc<dyn SyncStatusListener>>,
+    listener: Option<Arc<dyn SyncStatusListener>>,
     pool: &ConnectionPool,
     storage_path: &Path,
     namespace_id: i32,
@@ -49,8 +49,18 @@ pub async fn run(
             break;
         }
 
+        // Notify that we're starting to index
+        if let Some(ref cb) = listener {
+            cb.on_status_changed(SyncStatus::Indexing);
+        }
+
         if check_index_once(pool, storage_path, namespace_id)? {
             updated_tx.send(IndexerUpdateEvent::Updated).await?;
+        }
+
+        // Return to idle after indexing
+        if let Some(ref cb) = listener {
+            cb.on_status_changed(SyncStatus::Idle);
         }
 
         tokio::select! {

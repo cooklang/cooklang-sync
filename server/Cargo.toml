@@ -30,6 +30,11 @@ mime = "0.3"
 futures-core = "0.3"
 rocket-multipart = "0.2"
 
+[dev-dependencies]
+mockall = "0.12"
+tokio-test = "0.4"
+proptest = "1.4"
+rocket = { version = "0.5", features = ["json", "secrets"] }
 
 [features]
 default = ["database_sqlite"]

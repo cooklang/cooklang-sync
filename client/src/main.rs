@@ -1,5 +1,5 @@
-use log::trace;
 use cooklang_sync_client::SyncContext;
+use log::trace;
 
 fn main() -> Result<(), cooklang_sync_client::errors::SyncError> {
     env_logger::init();

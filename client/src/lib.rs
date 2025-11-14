@@ -63,7 +63,11 @@ impl SyncContext {
 
     /// Sets the status listener for this context
     pub fn set_listener(&self, listener: Arc<dyn SyncStatusListener>) {
-        let mut listener_lock = self.status_listener.lock().unwrap();
+        // Handle poisoned mutex by recovering the guard
+        let mut listener_lock = self
+            .status_listener
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *listener_lock = Some(listener);
     }
 
@@ -76,20 +80,35 @@ impl SyncContext {
 impl SyncContext {
     /// Notifies the status listener if one is set (internal use only)
     pub fn notify_status(&self, status: SyncStatus) {
-        let listener_lock = self.status_listener.lock().unwrap();
+        // Handle poisoned mutex by recovering the guard
+        let listener_lock = self
+            .status_listener
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(listener) = listener_lock.as_ref() {
             listener.on_status_changed(status);
         }
     }
 
     /// Returns a child token for passing to async tasks (internal use only)
+    ///
+    /// This uses `child_token()` rather than `clone()` to enable hierarchical cancellation:
+    /// - When the parent context is cancelled, all child tokens are automatically cancelled
+    /// - This allows the sync operation to spawn multiple tasks that all respect cancellation
+    /// - Cancelling a child token does NOT cancel the parent or sibling tasks
+    ///
+    /// This pattern is recommended by tokio-util for managing cancellation across task hierarchies.
     pub fn token(&self) -> CancellationToken {
         self.cancellation_token.child_token()
     }
 
     /// Returns a clone of the status listener (internal use only)
     pub fn listener(&self) -> Option<Arc<dyn SyncStatusListener>> {
-        let listener_lock = self.status_listener.lock().unwrap();
+        // Handle poisoned mutex by recovering the guard
+        let listener_lock = self
+            .status_listener
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         listener_lock.clone()
     }
 }
@@ -233,6 +252,7 @@ pub fn run_upload_once(
 }
 
 /// Runs local files watch and sync from/to remote continuously.
+#[allow(clippy::too_many_arguments)]
 pub async fn run_async(
     token: CancellationToken,
     listener: Option<Arc<dyn SyncStatusListener>>,
@@ -243,10 +263,7 @@ pub async fn run_async(
     namespace_id: i32,
     download_only: bool,
 ) -> Result<(), errors::SyncError> {
-    // Notify starting
-    if let Some(ref cb) = listener {
-        cb.on_status_changed(SyncStatus::Syncing);
-    }
+    // Initialize all components first
     let (mut debouncer, local_file_update_rx) = async_watcher()?;
     let (local_registry_updated_tx, local_registry_updated_rx) = channel(CHANNEL_SIZE);
 
@@ -263,6 +280,11 @@ pub async fn run_async(
             .watcher()
             .watch(storage_dir, RecursiveMode::Recursive)?;
         debug!("Started watcher on {:?}", storage_dir);
+    }
+
+    // Notify syncing status after successful initialization
+    if let Some(ref cb) = listener {
+        cb.on_status_changed(SyncStatus::Syncing);
     }
 
     let indexer = indexer::run(
@@ -291,16 +313,11 @@ pub async fn run_async(
 
     let result = try_join!(indexer, syncer);
 
-    // Notify completion
+    // Notify completion (on_complete includes success status and optional error message)
     if let Some(ref cb) = listener {
         match result {
             Ok(_) => cb.on_complete(true, None),
-            Err(ref e) => {
-                cb.on_status_changed(SyncStatus::Error {
-                    message: format!("{:?}", e),
-                });
-                cb.on_complete(false, Some(format!("{:?}", e)));
-            }
+            Err(ref e) => cb.on_complete(false, Some(format!("{:?}", e))),
         }
     }
 

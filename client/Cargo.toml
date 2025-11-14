@@ -44,6 +44,12 @@ jsonwebtoken = "9"
 async-stream = "0.3"
 path-slash = "0.2.1"
 
+[dev-dependencies]
+mockall = "0.12"
+tokio-test = "0.4"
+proptest = "1.4"
+wiremock = "0.6"
+tempfile = "3.8"
 
 [[bin]]
 # workaround: https://mozilla.github.io/uniffi-rs/tutorial/foreign_language_bindings.html#creating-the-bindgen-binary

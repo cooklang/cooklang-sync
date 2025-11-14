@@ -2,10 +2,12 @@ use crate::chunk_id::ChunkId;
 
 // todo try to avoid nesting?
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) struct MultiChunkResponse<'a> {
     chunk_ids: Vec<ChunkId<'a>>,
 }
 
+#[allow(dead_code)]
 impl MultiChunkResponse<'_> {
     pub fn new(chunk_ids: Vec<ChunkId<'_>>) -> MultiChunkResponse<'_> {
         MultiChunkResponse { chunk_ids }

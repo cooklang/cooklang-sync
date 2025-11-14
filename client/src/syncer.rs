@@ -15,7 +15,7 @@ use crate::errors::SyncError;
 use crate::models;
 use crate::registry;
 use crate::remote::{CommitResultStatus, Remote};
-use crate::SyncStatusListener;
+use crate::{SyncStatus, SyncStatusListener};
 
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
@@ -23,6 +23,7 @@ const INTERVAL_CHECK_UPLOAD_SEC: Duration = Duration::from_secs(47);
 // TODO should be in sync in multiple places
 const MAX_UPLOAD_SIZE: usize = 3_000_000;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn run(
     token: CancellationToken,
     listener: Option<Arc<dyn SyncStatusListener>>,
@@ -74,7 +75,7 @@ pub async fn run(
 
 async fn download_loop(
     token: CancellationToken,
-    _listener: Option<Arc<dyn SyncStatusListener>>,
+    listener: Option<Arc<dyn SyncStatusListener>>,
     pool: &ConnectionPool,
     chunker: Arc<Mutex<&mut Chunker>>,
     remote: &Remote,
@@ -86,6 +87,11 @@ async fn download_loop(
         if token.is_cancelled() {
             debug!("Download loop received shutdown signal");
             break;
+        }
+
+        // Notify that we're downloading
+        if let Some(ref cb) = listener {
+            cb.on_status_changed(SyncStatus::Downloading);
         }
 
         match check_download_once(
@@ -101,6 +107,11 @@ async fn download_loop(
             Err(SyncError::Unauthorized) => return Err(SyncError::Unauthorized),
             Err(_) => return Err(SyncError::Unknown),
         };
+
+        // Return to idle after downloading
+        if let Some(ref cb) = listener {
+            cb.on_status_changed(SyncStatus::Idle);
+        }
 
         // need to be longer than request timeout to make sure we don't get
         // client side timeout error
@@ -120,7 +131,7 @@ async fn download_loop(
 
 pub async fn upload_loop(
     token: CancellationToken,
-    _listener: Option<Arc<dyn SyncStatusListener>>,
+    listener: Option<Arc<dyn SyncStatusListener>>,
     pool: &ConnectionPool,
     chunker: Arc<Mutex<&mut Chunker>>,
     remote: &Remote,
@@ -137,9 +148,19 @@ pub async fn upload_loop(
             break;
         }
 
+        // Notify that we're uploading
+        if let Some(ref cb) = listener {
+            cb.on_status_changed(SyncStatus::Uploading);
+        }
+
         // need to wait only if we didn't upload anything
         // otherwise it should re-run immideately
         if check_upload_once(pool, Arc::clone(&chunker), remote, namespace_id).await? {
+            // Return to idle after uploading
+            if let Some(ref cb) = listener {
+                cb.on_status_changed(SyncStatus::Idle);
+            }
+
             // TODO test that it doesn't cancle stream
             tokio::select! {
                 _ = token.cancelled() => {
@@ -149,6 +170,9 @@ pub async fn upload_loop(
                 _ = tokio::time::sleep(INTERVAL_CHECK_UPLOAD_SEC) => {},
                 Some(_) = local_registry_updated_rx.next() => {},
             };
+        } else {
+            // If we still have work to do, don't set to idle - keep uploading status
+            // and immediately continue the loop
         }
     }
 

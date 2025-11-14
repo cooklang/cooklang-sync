@@ -120,9 +120,9 @@ mod async_property_tests {
     #[tokio::test]
     async fn test_binary_file_round_trip_various_sizes() {
         let test_cases: Vec<Vec<u8>> = vec![
-            vec![1, 2, 3, 4, 5], // Small file
-            vec![0u8; 1024],     // 1KB file
-            vec![255u8; 2048],   // 2KB file
+            vec![1, 2, 3, 4, 5],                          // Small file
+            vec![0u8; 1024],                              // 1KB file
+            vec![255u8; 2048],                            // 2KB file
             (0..5000).map(|i| (i % 256) as u8).collect(), // 5KB file with pattern
         ];
 
@@ -147,7 +147,8 @@ mod async_property_tests {
                 .await
                 .unwrap();
             assert_eq!(
-                reconstructed, content,
+                reconstructed,
+                content,
                 "Binary content mismatch for size: {}",
                 content.len()
             );

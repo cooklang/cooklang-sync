@@ -447,9 +447,7 @@ mod tests {
         // Create a test file
         let test_file = "test.cook";
         let content = "Line 1\nLine 2\nLine 3\n";
-        let mut file = File::create(temp_dir.path().join(test_file))
-            .await
-            .unwrap();
+        let mut file = File::create(temp_dir.path().join(test_file)).await.unwrap();
         file.write_all(content.as_bytes()).await.unwrap();
         file.flush().await.unwrap();
 
@@ -482,10 +480,7 @@ mod tests {
 
         // Save to file
         let test_file = "output.txt";
-        chunker
-            .save(test_file, vec![&hash1, &hash2])
-            .await
-            .unwrap();
+        chunker.save(test_file, vec![&hash1, &hash2]).await.unwrap();
 
         // Verify file exists
         assert!(chunker.exists(test_file));
@@ -505,9 +500,7 @@ mod tests {
 
         // Create a test file
         let test_file = "to_delete.txt";
-        let mut file = File::create(temp_dir.path().join(test_file))
-            .await
-            .unwrap();
+        let mut file = File::create(temp_dir.path().join(test_file)).await.unwrap();
         file.write_all(b"test content").await.unwrap();
         file.flush().await.unwrap();
 

@@ -105,7 +105,7 @@ async fn download_loop(
         {
             Ok(v) => v,
             Err(SyncError::Unauthorized) => return Err(SyncError::Unauthorized),
-            Err(_) => return Err(SyncError::Unknown),
+            Err(e) => return Err(SyncError::Unknown(format!("Check download failed: {}", e))),
         };
 
         // Return to idle after downloading

@@ -1,6 +1,6 @@
 [package]
 name = "cooklang-sync-client"
-version = "0.2.11"
+version = "0.3.0"
 authors = ["Alexey Dubovskoy <alexey@cooklang.org>"]
 edition = "2021"
 description = "A client library for cooklang-sync"
@@ -18,38 +18,38 @@ name = "cooklang_sync_client"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
-diesel = { version = "2.1", features = ["sqlite", "time", "r2d2", "serde_json"] }
-diesel_migrations = { version = "2.1", features = ["sqlite"] }
+diesel = { version = "2.3", features = ["sqlite", "time", "r2d2", "serde_json"] }
+diesel_migrations = { version = "2.3", features = ["sqlite"] }
 env_logger = "0.11"
 futures = "0.3"
 log = "0.4"
-notify = "6.1"
-notify-debouncer-mini = "0.4"
-quick_cache = "0.4.1"
-reqwest = { version = "0.11", features = ["json", "gzip", "stream"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+notify = "8.2"
+notify-debouncer-mini = "0.7"
+quick_cache = "0.6.18"
+reqwest = { version = "0.12", features = ["json", "gzip", "stream"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-thiserror = "1"
+thiserror = "2"
 time = { version = "0.3", features = ["std"] }
-tokio = { version = "1.35", features = ["time", "fs", "macros", "rt-multi-thread"] }
+tokio = { version = "1.48", features = ["time", "fs", "macros", "rt-multi-thread"] }
 tokio-util = "0.7"
-uniffi = "0.28"
-uuid = { version = "1.7", features = ["v4"] }
-walkdir = "2.4"
+uniffi = "0.30"
+uuid = { version = "1.18", features = ["v4"] }
+walkdir = "2.5"
 openssl = { version = "0.10", features = ["vendored"] }
-reqwest-middleware = "0.2"
-jsonwebtoken = "9"
+reqwest-middleware = "0.4"
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
 async-stream = "0.3"
 path-slash = "0.2.1"
 
 [dev-dependencies]
-mockall = "0.12"
+mockall = "0.13"
 tokio-test = "0.4"
-proptest = "1.4"
+proptest = "1.9"
 wiremock = "0.6"
-tempfile = "3.8"
+tempfile = "3.23"
 
 [[bin]]
 # workaround: https://mozilla.github.io/uniffi-rs/tutorial/foreign_language_bindings.html#creating-the-bindgen-binary

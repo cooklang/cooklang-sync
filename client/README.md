@@ -260,6 +260,175 @@ The `SyncStatus` enum includes:
 5. **Cancellation**: Call `context.cancel()` before app termination to clean up resources
 6. **Read-Only Mode**: Set `downloadOnly: true` if you want to prevent local changes from syncing to server
 
+## Usage (Android/Kotlin)
+
+### Installation
+
+Add the JNA dependency and the native library to your Android project:
+
+```kotlin
+// In build.gradle.kts
+dependencies {
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
+    // Add the generated Kotlin bindings and native library
+}
+```
+
+Build the Android library using the Rust toolchain and include it in your project's `jniLibs` directory.
+
+### Basic Example
+
+```kotlin
+import org.cooklang.sync.*
+import kotlinx.coroutines.*
+
+// 1. Create a status listener to receive sync updates
+class MySyncListener : SyncStatusListener {
+    override fun onStatusChanged(status: SyncStatus) {
+        when (status) {
+            is SyncStatus.Idle -> println("Sync idle")
+            is SyncStatus.Syncing -> println("Syncing...")
+            is SyncStatus.Indexing -> println("Indexing files...")
+            is SyncStatus.Downloading -> println("Downloading from server...")
+            is SyncStatus.Uploading -> println("Uploading to server...")
+            is SyncStatus.Error -> println("Error: ${status.message}")
+        }
+    }
+
+    override fun onComplete(success: Boolean, message: String?) {
+        println("Sync completed. Success: $success, Message: ${message ?: "none"}")
+    }
+}
+
+// 2. Set up sync context
+val context = SyncContext()
+val listener = MySyncListener()
+context.setListener(listener)
+
+// 3. Configure sync parameters
+val storageDir = context.getExternalFilesDir(null)?.resolve("recipes")?.absolutePath
+    ?: throw IllegalStateException("Cannot access external files directory")
+val dbFilePath = context.getDatabasePath("sync.db").absolutePath
+val apiEndpoint = "https://api.cooklang.org"
+val remoteToken = "your_jwt_token_here"
+val namespaceId = 1
+
+// 4. Run continuous sync in a coroutine (watches for file changes)
+lifecycleScope.launch(Dispatchers.IO) {
+    try {
+        run(
+            context = context,
+            storageDir = storageDir,
+            dbFilePath = dbFilePath,
+            apiEndpoint = apiEndpoint,
+            remoteToken = remoteToken,
+            namespaceId = namespaceId,
+            downloadOnly = false  // Set to true for read-only sync
+        )
+    } catch (e: SyncException) {
+        Log.e("Sync", "Sync error", e)
+    }
+}
+
+// 5. Cancel sync when needed
+override fun onDestroy() {
+    super.onDestroy()
+    context.cancel()
+}
+```
+
+### One-Time Sync Operations
+
+For manual control over sync operations:
+
+```kotlin
+// Download updates from server (one-time)
+lifecycleScope.launch(Dispatchers.IO) {
+    try {
+        runDownloadOnce(
+            storageDir = storageDir,
+            dbFilePath = dbFilePath,
+            apiEndpoint = apiEndpoint,
+            remoteToken = remoteToken,
+            namespaceId = namespaceId
+        )
+        Log.d("Sync", "Download completed")
+    } catch (e: SyncException) {
+        Log.e("Sync", "Download error", e)
+    }
+}
+
+// Upload local changes to server (one-time)
+lifecycleScope.launch(Dispatchers.IO) {
+    try {
+        runUploadOnce(
+            storageDir = storageDir,
+            dbFilePath = dbFilePath,
+            apiEndpoint = apiEndpoint,
+            remoteToken = remoteToken,
+            namespaceId = namespaceId
+        )
+        Log.d("Sync", "Upload completed")
+    } catch (e: SyncException) {
+        Log.e("Sync", "Upload error", e)
+    }
+}
+```
+
+### Advanced: Wait for Remote Updates
+
+Use this to implement efficient background sync with server-sent events:
+
+```kotlin
+// Wait for remote updates, then download
+lifecycleScope.launch(Dispatchers.IO) {
+    try {
+        // This blocks until server notifies of changes or timeout
+        waitRemoteUpdate(apiEndpoint = apiEndpoint, remoteToken = remoteToken)
+
+        // Now download the updates
+        runDownloadOnce(
+            storageDir = storageDir,
+            dbFilePath = dbFilePath,
+            apiEndpoint = apiEndpoint,
+            remoteToken = remoteToken,
+            namespaceId = namespaceId
+        )
+    } catch (e: SyncException) {
+        Log.e("Sync", "Error", e)
+    }
+}
+```
+
+### Exception Handling
+
+The library throws `SyncException` with various subtypes:
+
+```kotlin
+try {
+    run(...)
+} catch (e: SyncException.Unauthorized) {
+    // Handle authentication error
+    Log.e("Sync", "Unauthorized: ${e.message}")
+} catch (e: SyncException.IoException) {
+    // Handle I/O error
+    Log.e("Sync", "I/O error: ${e.message}")
+} catch (e: SyncException) {
+    // Handle other errors
+    Log.e("Sync", "Sync error: ${e.message}")
+}
+```
+
+### Best Practices (Android)
+
+1. **Database Location**: Use `context.getDatabasePath()` to get proper database location
+2. **Storage Directory**: Use `context.getExternalFilesDir()` for synced files
+3. **Background Sync**: Use WorkManager for periodic background sync operations
+4. **Coroutines**: Always run sync operations on `Dispatchers.IO` to avoid blocking main thread
+5. **Lifecycle**: Cancel sync context in `onDestroy()` or when Activity/Fragment is destroyed
+6. **Permissions**: Request `WRITE_EXTERNAL_STORAGE` permission if targeting Android < 10
+7. **Read-Only Mode**: Set `downloadOnly = true` if you want to prevent local changes from syncing
+
 Building bindings
 =================
 

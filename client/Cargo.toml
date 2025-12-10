@@ -1,6 +1,6 @@
 [package]
 name = "cooklang-sync-client"
-version = "0.3.0"
+version = "0.3.3"
 authors = ["Alexey Dubovskoy <alexey@cooklang.org>"]
 edition = "2021"
 description = "A client library for cooklang-sync"

@@ -6,31 +6,31 @@ let useLocalXCFramework = ProcessInfo.processInfo.environment["USE_LOCAL_XCFRAME
 
 var targets: [Target] = [
     .target(
-        name: "CooklangSyncClient",
-        dependencies: [.target(name: useLocalXCFramework ? "CooklangSyncClientFFI_local" : "CooklangSyncClientFFI")],
-        path: "swift/Sources/CooklangSyncClient"),
+        name: "CooklangSync",
+        dependencies: [.target(name: useLocalXCFramework ? "CooklangSyncFFI_local" : "CooklangSyncFFI")],
+        path: "swift/Sources/CooklangSync"),
 ]
 
 if useLocalXCFramework {
     targets.append(.binaryTarget(
-        name: "CooklangSyncClientFFI_local",
-        path: "swift/CooklangSyncClientFFI.xcframework"))
+        name: "CooklangSyncFFI_local",
+        path: "swift/CooklangSyncFFI.xcframework"))
 } else {
     targets.append(.binaryTarget(
-        name: "CooklangSyncClientFFI",
-        url: "https://github.com/cooklang/cooklang-sync/releases/download/v0.4.0/CooklangSyncClientFFI.xcframework.zip",
-        checksum: "9f50dd23784af802bd5c6c74504a3c2bcf25d33e6dfb383c31e88fa4fd350b0f"))
+        name: "CooklangSyncFFI",
+        url: "https://github.com/cooklang/cooklang-sync/releases/download/v0.4.1/CooklangSyncFFI.xcframework.zip",
+        checksum: "0000000000000000000000000000000000000000000000000000000000000000"))
 }
 
 let package = Package(
-    name: "cooklang-sync-client",
+    name: "cooklang-sync",
     platforms: [
         .iOS(.v16),
     ],
     products: [
         .library(
-            name: "CooklangSyncClient",
-            targets: ["CooklangSyncClient"]),
+            name: "CooklangSync",
+            targets: ["CooklangSync"]),
     ],
     dependencies: [
     ],

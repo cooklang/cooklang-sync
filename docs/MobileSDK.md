@@ -21,19 +21,19 @@ dependencies: [
 ]
 ```
 
-Then add `CooklangSyncClient` to your target dependencies:
+Then add `CooklangSync` to your target dependencies:
 
 ```swift
 .target(
     name: "YourApp",
-    dependencies: ["CooklangSyncClient"]
+    dependencies: ["CooklangSync"]
 )
 ```
 
 ### Usage
 
 ```swift
-import CooklangSyncClient
+import CooklangSync
 
 // Initialize the sync client
 // (API details depend on the exposed UniFFI interface)
@@ -52,7 +52,7 @@ To use a locally built XCFramework instead of the release binary:
 export USE_LOCAL_XCFRAMEWORK=1
 ```
 
-Then build with Swift Package Manager as usual. This will use the XCFramework at `swift/CooklangSyncClientFFI.xcframework`.
+Then build with Swift Package Manager as usual. This will use the XCFramework at `swift/CooklangSyncFFI.xcframework`.
 
 ## Android (Gradle)
 
@@ -80,7 +80,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("org.cooklang:cooklang-sync:0.4.0")
+    implementation("com.github.cooklang:sync:0.4.0")
 }
 ```
 
@@ -203,11 +203,11 @@ The library follows semantic versioning. iOS and Android packages are released t
 
 ## Troubleshooting
 
-### iOS: "No such module 'CooklangSyncClient'"
+### iOS: "No such module 'CooklangSync'"
 
 Ensure you've added the package dependency correctly and the minimum deployment target is iOS 16.0.
 
-### Android: "Could not resolve org.cooklang:cooklang-sync"
+### Android: "Could not resolve com.github.cooklang:sync"
 
 1. Check that the GitHub Packages repository is configured
 2. Verify your GitHub token has `read:packages` scope

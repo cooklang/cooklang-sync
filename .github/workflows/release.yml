@@ -16,7 +16,7 @@ env:
   CARGO_TERM_COLOR: always
   PACKAGE_NAME: cooklang-sync-client
   LIB_NAME: cooklang_sync_client
-  FRAMEWORK_NAME: CooklangSyncClientFFI
+  FRAMEWORK_NAME: CooklangSyncFFI
 
 jobs:
   # Build iOS artifacts on macOS
@@ -88,7 +88,7 @@ jobs:
           # Create Info.plist for device
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string en" target/ios/ios-device/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string ${{ env.FRAMEWORK_NAME }}" target/ios/ios-device/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.cooklang.cooklang-sync-client" target/ios/ios-device/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.cooklang.CooklangSync" target/ios/ios-device/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundleInfoDictionaryVersion string 6.0" target/ios/ios-device/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string FMWK" target/ios/ios-device/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.0" target/ios/ios-device/Info.plist
@@ -98,7 +98,7 @@ jobs:
           # Create Info.plist for simulator
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string en" target/ios/ios-simulator/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string ${{ env.FRAMEWORK_NAME }}" target/ios/ios-simulator/Info.plist
-          /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.cooklang.cooklang-sync-client" target/ios/ios-simulator/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.cooklang.CooklangSync" target/ios/ios-simulator/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundleInfoDictionaryVersion string 6.0" target/ios/ios-simulator/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string FMWK" target/ios/ios-simulator/Info.plist
           /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.0" target/ios/ios-simulator/Info.plist
@@ -339,7 +339,7 @@ jobs:
             ```
 
             Or download `cooklang-sync-ios.zip` which contains:
-            - `CooklangSyncClientFFI.xcframework` - XCFramework for manual integration
+            - `CooklangSyncFFI.xcframework` - XCFramework for manual integration
             - `swift/` - Swift bindings source files
 
             ### Android (GitHub Packages Maven)
@@ -361,7 +361,7 @@ jobs:
 
             Add to your `build.gradle.kts`:
             ```kotlin
-            implementation("org.cooklang:cooklang-sync:${{ steps.version.outputs.VERSION }}")
+            implementation("com.github.cooklang:sync:${{ steps.version.outputs.VERSION }}")
             ```
 
             Or download `cooklang-sync-android.zip` which contains:
@@ -429,31 +429,31 @@ jobs:
 
           var targets: [Target] = [
               .target(
-                  name: "CooklangSyncClient",
-                  dependencies: [.target(name: useLocalXCFramework ? "CooklangSyncClientFFI_local" : "CooklangSyncClientFFI")],
-                  path: "swift/Sources/CooklangSyncClient"),
+                  name: "CooklangSync",
+                  dependencies: [.target(name: useLocalXCFramework ? "CooklangSyncFFI_local" : "CooklangSyncFFI")],
+                  path: "swift/Sources/CooklangSync"),
           ]
 
           if useLocalXCFramework {
               targets.append(.binaryTarget(
-                  name: "CooklangSyncClientFFI_local",
-                  path: "swift/CooklangSyncClientFFI.xcframework"))
+                  name: "CooklangSyncFFI_local",
+                  path: "swift/CooklangSyncFFI.xcframework"))
           } else {
               targets.append(.binaryTarget(
-                  name: "CooklangSyncClientFFI",
+                  name: "CooklangSyncFFI",
                   url: "https://github.com/cooklang/cooklang-sync/releases/download/${VERSION}/${{ env.FRAMEWORK_NAME }}.xcframework.zip",
                   checksum: "${CHECKSUM}"))
           }
 
           let package = Package(
-              name: "cooklang-sync-client",
+              name: "cooklang-sync",
               platforms: [
                   .iOS(.v16),
               ],
               products: [
                   .library(
-                      name: "CooklangSyncClient",
-                      targets: ["CooklangSyncClient"]),
+                      name: "CooklangSync",
+                      targets: ["CooklangSync"]),
               ],
               dependencies: [
               ],
@@ -597,8 +597,8 @@ jobs:
           publishing {
               publications {
                   register<MavenPublication>("release") {
-                      groupId = "org.cooklang"
-                      artifactId = "cooklang-sync"
+                      groupId = "com.github.cooklang"
+                      artifactId = "sync"
                       version = "${VERSION}"
 
                       afterEvaluate {
@@ -606,8 +606,8 @@ jobs:
                       }
 
                       pom {
-                          name.set("CooklangSync")
-                          description.set("Android library for Cooklang sync client")
+                          name.set("sync")
+                          description.set("Cooklang Sync Library for Android")
                           url.set("https://github.com/cooklang/cooklang-sync")
 
                           licenses {

@@ -4,7 +4,7 @@
 #
 # Usage: ./build_swift_framework.sh <package-name> <lib-name> <framework-name>
 #
-# Example: ./build_swift_framework.sh cooklang-sync-client cooklang_sync_client CooklangSyncClientFFI
+# Example: ./build_swift_framework.sh cooklang-sync-client cooklang_sync_client CooklangSyncFFI
 #
 # Note: The lib-name may contain underscores, but the CFBundleIdentifier will
 # automatically convert them to hyphens to comply with Apple's naming requirements.
@@ -150,7 +150,7 @@ framework() {
     echo "Creating universal framework for $framework_root"
 
 	lib $framework_root $targets
-	local swift_root=$RUST_BUILD_DIRECTORY/swift/Sources/CooklangSyncClient
+	local swift_root=$RUST_BUILD_DIRECTORY/swift/Sources/CooklangSync
 	bindgen $target $swift_root
 	header $framework_root $swift_root
 	modulemap $framework_root $swift_root

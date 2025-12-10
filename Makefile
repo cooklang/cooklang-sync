@@ -12,7 +12,7 @@
 # Package configuration
 PACKAGE_NAME := cooklang-sync-client
 LIB_NAME := cooklang_sync_client
-FRAMEWORK_NAME := CooklangSyncClientFFI
+FRAMEWORK_NAME := CooklangSyncFFI
 
 # Paths
 ROOT_DIR := $(shell pwd)

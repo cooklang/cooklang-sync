@@ -18,7 +18,7 @@ if useLocalXCFramework {
 } else {
     targets.append(.binaryTarget(
         name: "CooklangSyncClientFFI",
-        url: "https://github.com/cooklang/cooklang-sync/releases/download/client-v0.3.0/CooklangSyncClientFFI.xcframework.zip",
+        url: "https://github.com/cooklang/cooklang-sync/releases/download/v0.4.0/CooklangSyncClientFFI.xcframework.zip",
         checksum: "b883f94e1cca165d93674ac089bf04e323b1ffb502fe6ef730ffbf590f00e5ce"))
 }
 

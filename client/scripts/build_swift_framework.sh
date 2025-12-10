@@ -210,7 +210,7 @@ update_package_swift() {
     # Update the URL and checksum in Package.swift
     # Note: macOS sed doesn't support {n} repetition, so we use a longer pattern
     sed -E \
-        -e "s|url: \"https://github.com/cooklang/cooklang-sync/releases/download/client-v[0-9]+\.[0-9]+\.[0-9]+/CooklangSyncClientFFI\.xcframework\.zip\"|url: \"https://github.com/cooklang/cooklang-sync/releases/download/client-v${version}/CooklangSyncClientFFI.xcframework.zip\"|" \
+        -e "s|url: \"https://github.com/cooklang/cooklang-sync/releases/download/v[0-9]+\.[0-9]+\.[0-9]+/CooklangSyncClientFFI\.xcframework\.zip\"|url: \"https://github.com/cooklang/cooklang-sync/releases/download/v${version}/CooklangSyncClientFFI.xcframework.zip\"|" \
         -e "s|checksum: \"[a-f0-9][a-f0-9]*\"|checksum: \"${checksum}\"|" \
         "$package_swift" > "$temp_file"
 
@@ -245,7 +245,7 @@ echo "XCFramework: $RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework"
 echo "Zip: $RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework.zip"
 echo ""
 echo "Package.swift has been updated with the new version and checksum."
-echo "To publish, create a GitHub release with tag 'client-v$VERSION' and upload:"
+echo "To publish, create a GitHub release with tag 'v$VERSION' and upload:"
 echo "  $RUST_BUILD_DIRECTORY/swift/$FRAMEWORK.xcframework.zip"
 echo "=========================================="
 

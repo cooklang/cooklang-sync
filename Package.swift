@@ -18,8 +18,8 @@ if useLocalXCFramework {
 } else {
     targets.append(.binaryTarget(
         name: "CooklangSyncFFI",
-        url: "https://github.com/cooklang/cooklang-sync/releases/download/v0.4.2/CooklangSyncFFI.xcframework.zip",
-        checksum: "bd26f53b04a93e390e8ae81b6589db7d29076a5e296bbf03fa36c7fbd6c279ab"))
+        url: "https://github.com/cooklang/cooklang-sync/releases/download/v0.4.3/CooklangSyncFFI.xcframework.zip",
+        checksum: "0000000000000000000000000000000000000000000000000000000000000000"))
 }
 
 let package = Package(

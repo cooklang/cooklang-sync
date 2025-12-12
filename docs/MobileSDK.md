@@ -80,7 +80,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 dependencies {
-    implementation("com.github.cooklang:sync:0.4.0")
+    implementation("org.cooklang:cooklang-sync:0.4.4")
 }
 ```
 
@@ -207,7 +207,7 @@ The library follows semantic versioning. iOS and Android packages are released t
 
 Ensure you've added the package dependency correctly and the minimum deployment target is iOS 16.0.
 
-### Android: "Could not resolve com.github.cooklang:sync"
+### Android: "Could not resolve org.cooklang:cooklang-sync"
 
 1. Check that the GitHub Packages repository is configured
 2. Verify your GitHub token has `read:packages` scope

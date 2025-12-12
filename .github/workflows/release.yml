@@ -363,7 +363,7 @@ jobs:
 
             Add to your `build.gradle.kts`:
             ```kotlin
-            implementation("com.github.cooklang:sync:${{ steps.version.outputs.VERSION }}")
+            implementation("org.cooklang:cooklang-sync:${{ steps.version.outputs.VERSION }}")
             ```
 
             Or download `cooklang-sync-android.zip` which contains:
@@ -601,8 +601,8 @@ jobs:
           publishing {
               publications {
                   register<MavenPublication>("release") {
-                      groupId = "com.github.cooklang"
-                      artifactId = "sync"
+                      groupId = "org.cooklang"
+                      artifactId = "cooklang-sync"
                       version = "${VERSION}"
 
                       afterEvaluate {
@@ -610,7 +610,7 @@ jobs:
                       }
 
                       pom {
-                          name.set("sync")
+                          name.set("cooklang-sync")
                           description.set("Cooklang Sync Library for Android")
                           url.set("https://github.com/cooklang/cooklang-sync")
 

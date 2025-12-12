@@ -38,7 +38,7 @@ Add the dependency to `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.cooklang:sync:0.4.1")
+    implementation("org.cooklang:cooklang-sync:0.4.4")
 }
 ```
 

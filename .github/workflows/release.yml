@@ -1,15 +1,16 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
+      version:
+        description: 'Version to release (e.g., 0.4.8)'
+        required: true
+        type: string
       dry_run:
         description: 'Dry run (skip release creation)'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 env:
@@ -116,6 +117,13 @@ jobs:
           cd ../..
           zip -r cooklang-sync-ios.zip target/ios/${{ env.FRAMEWORK_NAME }}.xcframework target/ios/swift
 
+      - name: Compute checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(swift package compute-checksum ${{ env.FRAMEWORK_NAME }}.xcframework.zip)
+          echo "CHECKSUM=${CHECKSUM}" >> $GITHUB_OUTPUT
+          echo "Checksum: ${CHECKSUM}"
+
       - name: Upload XCFramework zip
         uses: actions/upload-artifact@v4
         with:
@@ -127,6 +135,9 @@ jobs:
         with:
           name: ios-artifacts
           path: cooklang-sync-ios.zip
+
+    outputs:
+      checksum: ${{ steps.checksum.outputs.CHECKSUM }}
 
   # Build Android artifacts on Linux
   build-android:
@@ -284,140 +295,24 @@ jobs:
           name: android-artifacts
           path: cooklang-sync-android.zip
 
-  # Create GitHub Release
-  release:
-    name: Create Release
+  # Update Package.swift and create tag
+  prepare-release:
+    name: Prepare Release
     needs: [build-ios, build-android]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') && github.event.inputs.dry_run != 'true'
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
-
-      - name: Download iOS XCFramework
-        uses: actions/download-artifact@v4
-        with:
-          name: ios-xcframework
-
-      - name: Download iOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ios-artifacts
-
-      - name: Download Android artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: android-artifacts
-
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          name: Release ${{ steps.version.outputs.VERSION }}
-          draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-          generate_release_notes: true
-          files: |
-            ${{ env.FRAMEWORK_NAME }}.xcframework.zip
-            cooklang-sync-ios.zip
-            cooklang-sync-android.zip
-          body: |
-            ## Mobile SDK Release ${{ steps.version.outputs.VERSION }}
-
-            ### iOS (Swift Package Manager)
-
-            Add to your `Package.swift` or Xcode project:
-            ```swift
-            .package(url: "https://github.com/cooklang/cooklang-sync.git", from: "${{ steps.version.outputs.VERSION }}")
-            ```
-
-            Or download `cooklang-sync-ios.zip` which contains:
-            - `CooklangSyncFFI.xcframework` - XCFramework for manual integration
-            - `swift/` - Swift bindings source files
-
-            ### Android (GitHub Packages Maven)
-
-            Add to your `settings.gradle.kts`:
-            ```kotlin
-            dependencyResolutionManagement {
-                repositories {
-                    maven {
-                        url = uri("https://maven.pkg.github.com/cooklang/cooklang-sync")
-                        credentials {
-                            username = System.getenv("GITHUB_ACTOR")
-                            password = System.getenv("GITHUB_TOKEN")
-                        }
-                    }
-                }
-            }
-            ```
-
-            Add to your `build.gradle.kts`:
-            ```kotlin
-            implementation("org.cooklang:cooklang-sync:${{ steps.version.outputs.VERSION }}")
-            ```
-
-            Or download `cooklang-sync-android.zip` which contains:
-            - `cooklang-sync-android/` - Android library module
-            - `jniLibs/` - Native libraries for all architectures
-            - `kotlin/` - Kotlin bindings source files
-
-            ### Supported Architectures
-
-            **iOS:**
-            - arm64 (devices)
-            - arm64 (simulator, Apple Silicon only)
-
-            **Android:**
-            - arm64-v8a
-            - armeabi-v7a
-            - x86_64
-
-            > ⚠️ **Note:** iOS Simulator requires Apple Silicon Mac. Intel Mac simulators are not supported.
-
-            See the README for integration instructions.
-
-  # Update Package.swift for Swift Package Manager
-  update-swift-package:
-    name: Update Package.swift
-    needs: [release]
     runs-on: macos-latest
-    if: startsWith(github.ref, 'refs/tags/') && github.event.inputs.dry_run != 'true'
+    if: ${{ !inputs.dry_run }}
     permissions:
       contents: write
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
         with:
-          ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Download iOS zip and compute checksum
-        id: checksum
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          URL="https://github.com/cooklang/cooklang-sync/releases/download/${VERSION}/${{ env.FRAMEWORK_NAME }}.xcframework.zip"
-
-          echo "Downloading from: ${URL}"
-          curl -fsSL "$URL" -o ios.zip
-
-          CHECKSUM=$(swift package compute-checksum ios.zip)
-          echo "Checksum: ${CHECKSUM}"
-          echo "CHECKSUM=${CHECKSUM}" >> $GITHUB_OUTPUT
 
       - name: Update Package.swift
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          CHECKSUM="${{ steps.checksum.outputs.CHECKSUM }}"
+          VERSION="v${{ inputs.version }}"
+          CHECKSUM="${{ needs.build-ios.outputs.checksum }}"
 
           cat > Package.swift << EOF
           // swift-tools-version: 5.7
@@ -451,7 +346,7 @@ jobs:
               ],
               products: [
                   .library(
-                      name: "CooklangSync",
+                      name: "CooklangSyncClient",
                       targets: ["CooklangSync"]),
               ],
               dependencies: [
@@ -460,30 +355,122 @@ jobs:
           )
           EOF
 
-      - name: Commit and push Package.swift
+      - name: Commit Package.swift and create tag
         run: |
+          VERSION="v${{ inputs.version }}"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add Package.swift
-          git commit -m "Update Package.swift for ${{ steps.version.outputs.VERSION }}" || echo "No changes to commit"
+          git commit -m "Update Package.swift for ${VERSION}" || echo "No changes to commit"
           git push origin main
 
-      - name: Update tag to include Package.swift changes
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          # Delete the old tag and create a new one at the current commit
-          git tag -d "$VERSION" || true
-          git push origin ":refs/tags/$VERSION" || true
-          git tag "$VERSION"
-          git push origin "$VERSION"
+          # Create tag at current commit (which includes updated Package.swift)
+          git tag "${VERSION}"
+          git push origin "${VERSION}"
+
+  # Create GitHub Release
+  release:
+    name: Create Release
+    needs: [build-ios, build-android, prepare-release]
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.dry_run }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Download iOS XCFramework
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-xcframework
+
+      - name: Download iOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-artifacts
+
+      - name: Download Android artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Release v${{ inputs.version }}
+          draft: false
+          prerelease: ${{ contains(inputs.version, 'alpha') || contains(inputs.version, 'beta') || contains(inputs.version, 'rc') }}
+          generate_release_notes: true
+          files: |
+            ${{ env.FRAMEWORK_NAME }}.xcframework.zip
+            cooklang-sync-ios.zip
+            cooklang-sync-android.zip
+          body: |
+            ## Mobile SDK Release v${{ inputs.version }}
+
+            ### iOS (Swift Package Manager)
+
+            Add to your `Package.swift` or Xcode project:
+            ```swift
+            .package(url: "https://github.com/cooklang/cooklang-sync.git", from: "${{ inputs.version }}")
+            ```
+
+            Or download `cooklang-sync-ios.zip` which contains:
+            - `CooklangSyncFFI.xcframework` - XCFramework for manual integration
+            - `swift/` - Swift bindings source files
+
+            ### Android (GitHub Packages Maven)
+
+            Add to your `settings.gradle.kts`:
+            ```kotlin
+            dependencyResolutionManagement {
+                repositories {
+                    maven {
+                        url = uri("https://maven.pkg.github.com/cooklang/cooklang-sync")
+                        credentials {
+                            username = System.getenv("GITHUB_ACTOR")
+                            password = System.getenv("GITHUB_TOKEN")
+                        }
+                    }
+                }
+            }
+            ```
+
+            Add to your `build.gradle.kts`:
+            ```kotlin
+            implementation("org.cooklang:cooklang-sync:${{ inputs.version }}")
+            ```
+
+            Or download `cooklang-sync-android.zip` which contains:
+            - `cooklang-sync-android/` - Android library module
+            - `jniLibs/` - Native libraries for all architectures
+            - `kotlin/` - Kotlin bindings source files
+
+            ### Supported Architectures
+
+            **iOS:**
+            - arm64 (devices)
+            - arm64 (simulator, Apple Silicon only)
+
+            **Android:**
+            - arm64-v8a
+            - armeabi-v7a
+            - x86_64
+
+            > ⚠️ **Note:** iOS Simulator requires Apple Silicon Mac. Intel Mac simulators are not supported.
+
+            See the README for integration instructions.
 
   # Publish Android package to GitHub Packages
   publish-android:
     name: Publish Android to GitHub Packages
     needs: [build-android, release]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') && github.event.inputs.dry_run != 'true'
+    if: ${{ !inputs.dry_run }}
     permissions:
       contents: read
       packages: write
@@ -501,12 +488,6 @@ jobs:
           mkdir -p target/android
           unzip cooklang-sync-android.zip -d target/android/
 
-      - name: Get version from tag
-        id: version
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
-
       - name: Setup JDK
         uses: actions/setup-java@v4
         with:
@@ -521,7 +502,7 @@ jobs:
 
       - name: Configure Android library for publishing
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION="${{ inputs.version }}"
           ANDROID_DIR="target/android/cooklang-sync-android"
 
           # Create settings.gradle.kts with plugin management

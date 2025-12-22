@@ -30,7 +30,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
@@ -48,7 +48,6 @@ jobs:
         run: |
           cargo build --release --package ${{ env.PACKAGE_NAME }} --target aarch64-apple-ios
           cargo build --release --package ${{ env.PACKAGE_NAME }} --target aarch64-apple-ios-sim
-          cargo build --release --package ${{ env.PACKAGE_NAME }} --target x86_64-apple-ios
 
       - name: Generate Swift bindings
         run: |
@@ -69,11 +68,8 @@ jobs:
           # Copy device library
           cp target/aarch64-apple-ios/release/lib${{ env.LIB_NAME }}.a target/ios/ios-device/
 
-          # Create fat library for simulator
-          lipo -create \
-            target/aarch64-apple-ios-sim/release/lib${{ env.LIB_NAME }}.a \
-            target/x86_64-apple-ios/release/lib${{ env.LIB_NAME }}.a \
-            -output target/ios/ios-simulator/lib${{ env.LIB_NAME }}.a
+          # Copy simulator library (arm64 only - Apple Silicon)
+          cp target/aarch64-apple-ios-sim/release/lib${{ env.LIB_NAME }}.a target/ios/ios-simulator/
 
           # Create headers
           mkdir -p target/ios/ios-device/Headers target/ios/ios-simulator/Headers
@@ -375,13 +371,14 @@ jobs:
 
             **iOS:**
             - arm64 (devices)
-            - arm64 (simulator, Apple Silicon)
-            - x86_64 (simulator, Intel)
+            - arm64 (simulator, Apple Silicon only)
 
             **Android:**
             - arm64-v8a
             - armeabi-v7a
             - x86_64
+
+            > ⚠️ **Note:** iOS Simulator requires Apple Silicon Mac. Intel Mac simulators are not supported.
 
             See the README for integration instructions.
 

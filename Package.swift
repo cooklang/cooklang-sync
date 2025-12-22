@@ -29,7 +29,7 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "CooklangSync",
+            name: "CooklangSyncClient",
             targets: ["CooklangSync"]),
     ],
     dependencies: [

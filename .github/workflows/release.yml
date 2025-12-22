@@ -469,6 +469,15 @@ jobs:
           git commit -m "Update Package.swift for ${{ steps.version.outputs.VERSION }}" || echo "No changes to commit"
           git push origin main
 
+      - name: Update tag to include Package.swift changes
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          # Delete the old tag and create a new one at the current commit
+          git tag -d "$VERSION" || true
+          git push origin ":refs/tags/$VERSION" || true
+          git tag "$VERSION"
+          git push origin "$VERSION"
+
   # Publish Android package to GitHub Packages
   publish-android:
     name: Publish Android to GitHub Packages

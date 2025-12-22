@@ -20,8 +20,8 @@ CLIENT_DIR := $(ROOT_DIR)/client
 SCRIPTS_DIR := $(CLIENT_DIR)/scripts
 TARGET_DIR := $(ROOT_DIR)/target
 
-# iOS targets
-IOS_TARGETS := aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+# iOS targets (arm64 only - no Intel Mac simulator support)
+IOS_TARGETS := aarch64-apple-ios aarch64-apple-ios-sim
 
 # Android targets
 ANDROID_TARGETS := aarch64-linux-android armv7-linux-androideabi x86_64-linux-android

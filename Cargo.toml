@@ -6,3 +6,10 @@ members = [
 ]
 
 resolver = "2"
+
+[profile.release]
+lto = false
+opt-level = "z"
+strip = true
+# Note: panic = "abort" saves ~50KB but may cause issues with UniFFI error handling
+# Uncomment if you verify it works: panic = "abort"

@@ -1,7 +1,7 @@
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use futures::{channel::mpsc::channel, try_join};
-use jsonwebtoken::{decode, Algorithm, DecodingKey, TokenData, Validation};
 use notify::RecursiveMode;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -18,7 +18,6 @@ use crate::syncer::{check_download_once, check_upload_once};
 const CHANNEL_SIZE: usize = 100;
 const INMEMORY_CACHE_MAX_REC: usize = 100000;
 const INMEMORY_CACHE_MAX_MEM: u64 = 100_000_000_000;
-const DUMMY_SECRET: &[u8] = b"dummy_secret";
 
 pub mod chunker;
 pub mod connection;
@@ -36,22 +35,22 @@ pub mod syncer;
 pub use context::{SyncContext, SyncStatusListener};
 pub use models::SyncStatus;
 
+/// Extracts the user ID from a JWT token without signature verification.
+/// JWT format: header.payload.signature (base64url encoded)
 pub fn extract_uid_from_jwt(token: &str) -> i32 {
-    let mut validation = Validation::new(Algorithm::HS256);
-
-    // Disabling signature validation because we don't know real secret
-    validation.insecure_disable_signature_validation();
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Deserialize)]
     struct Claims {
         uid: i32,
     }
 
-    let token_data: TokenData<Claims> =
-        decode::<Claims>(token, &DecodingKey::from_secret(DUMMY_SECRET), &validation)
-            .expect("Failed to decode token");
+    let parts: Vec<&str> = token.split('.').collect();
+    let payload = URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .expect("Failed to decode JWT payload");
+    let claims: Claims =
+        serde_json::from_slice(&payload).expect("Failed to parse JWT claims");
 
-    token_data.claims.uid
+    claims.uid
 }
 
 uniffi::setup_scaffolding!();

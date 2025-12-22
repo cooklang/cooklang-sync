@@ -1,6 +1,6 @@
 [package]
 name = "cooklang-sync-client"
-version = "0.4.4"
+version = "0.4.5"
 authors = ["Alexey Dubovskoy <alexey@cooklang.org>"]
 edition = "2021"
 description = "A client library for cooklang-sync"
@@ -20,7 +20,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [dependencies]
 diesel = { version = "2.3", features = ["sqlite", "time", "r2d2", "serde_json"] }
 diesel_migrations = { version = "2.3", features = ["sqlite"] }
-env_logger = "0.11"
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
 futures = "0.3"
 log = "0.4"
 notify = "8.2"
@@ -40,7 +40,7 @@ uuid = { version = "1.18", features = ["v4"] }
 walkdir = "2.5"
 openssl = { version = "0.10", features = ["vendored"] }
 reqwest-middleware = "0.4"
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+base64 = "0.22"
 async-stream = "0.3"
 path-slash = "0.2.1"
 

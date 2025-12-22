@@ -226,7 +226,7 @@ BUILD_TARGET=$RUST_BUILD_DIRECTORY/target
 
 clean
 framework ios aarch64-apple-ios
-framework ios-sim aarch64-apple-ios-sim x86_64-apple-ios
+framework ios-sim aarch64-apple-ios-sim
 xcframework ios ios-sim
 
 # Zip the XCFramework and update Package.swift

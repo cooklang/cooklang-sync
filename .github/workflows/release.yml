@@ -78,8 +78,8 @@ jobs:
           cp target/ios/swift/${{ env.FRAMEWORK_NAME }}.h target/ios/ios-simulator/Headers/
 
           # Create module maps inside Headers directory
-          echo 'framework module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-device/Headers/module.modulemap
-          echo 'framework module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-simulator/Headers/module.modulemap
+          echo 'module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-device/Headers/module.modulemap
+          echo 'module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-simulator/Headers/module.modulemap
 
           # Create Info.plist for device
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string en" target/ios/ios-device/Info.plist

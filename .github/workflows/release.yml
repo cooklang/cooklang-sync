@@ -72,15 +72,14 @@ jobs:
           # Copy simulator library (arm64 only - Apple Silicon)
           cp target/aarch64-apple-ios-sim/release/lib${{ env.LIB_NAME }}.a target/ios/ios-simulator/
 
-          # Create headers
+          # Create headers and module maps
           mkdir -p target/ios/ios-device/Headers target/ios/ios-simulator/Headers
           cp target/ios/swift/${{ env.FRAMEWORK_NAME }}.h target/ios/ios-device/Headers/
           cp target/ios/swift/${{ env.FRAMEWORK_NAME }}.h target/ios/ios-simulator/Headers/
 
-          # Create module maps
-          mkdir -p target/ios/ios-device/Modules target/ios/ios-simulator/Modules
-          echo 'framework module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-device/Modules/module.modulemap
-          echo 'framework module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-simulator/Modules/module.modulemap
+          # Create module maps inside Headers directory
+          echo 'framework module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-device/Headers/module.modulemap
+          echo 'framework module ${{ env.FRAMEWORK_NAME }} { header "${{ env.FRAMEWORK_NAME }}.h" export * }' > target/ios/ios-simulator/Headers/module.modulemap
 
           # Create Info.plist for device
           /usr/libexec/PlistBuddy -c "Add :CFBundleDevelopmentRegion string en" target/ios/ios-device/Info.plist

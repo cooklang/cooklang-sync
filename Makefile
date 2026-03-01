@@ -88,8 +88,8 @@ install-android-deps:
 bindings-swift:
 	@echo "Generating Swift bindings..."
 	@mkdir -p $(TARGET_DIR)/bindings/swift
-	cargo build --package $(PACKAGE_NAME) --release --target aarch64-apple-ios
-	cargo run --package $(PACKAGE_NAME) --features uniffi/cli --bin uniffi-bindgen -- generate \
+	cargo build --package $(PACKAGE_NAME) --features ffi --release --target aarch64-apple-ios
+	cargo run --package $(PACKAGE_NAME) --features ffi,uniffi/cli --bin uniffi-bindgen -- generate \
 		--library $(TARGET_DIR)/aarch64-apple-ios/release/lib$(LIB_NAME).a \
 		--language swift \
 		--config $(CLIENT_DIR)/uniffi.toml \
@@ -103,8 +103,8 @@ bindings-kotlin:
 	@if [ -z "$$ANDROID_NDK_HOME" ]; then \
 		echo "Warning: ANDROID_NDK_HOME not set, trying to auto-detect..."; \
 	fi
-	cargo ndk --target aarch64-linux-android --platform 21 build --release --package $(PACKAGE_NAME)
-	cargo build --package $(PACKAGE_NAME) --features uniffi/cli --bin uniffi-bindgen --release
+	cargo ndk --target aarch64-linux-android --platform 21 build --release --features ffi --package $(PACKAGE_NAME)
+	cargo build --package $(PACKAGE_NAME) --features ffi,uniffi/cli --bin uniffi-bindgen --release
 	$(TARGET_DIR)/release/uniffi-bindgen generate \
 		--library $(TARGET_DIR)/aarch64-linux-android/release/lib$(LIB_NAME).so \
 		--language kotlin \

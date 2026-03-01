@@ -6,23 +6,23 @@ use crate::models::SyncStatus;
 /// Trait for receiving sync status updates
 /// Implementations of this trait in foreign languages (Swift, etc.) will receive
 /// real-time status updates during sync operations
-#[uniffi::export(with_foreign)]
+#[cfg_attr(feature = "ffi", uniffi::export(with_foreign))]
 pub trait SyncStatusListener: Send + Sync {
     fn on_status_changed(&self, status: SyncStatus);
     fn on_complete(&self, success: bool, message: Option<String>);
 }
 
 /// Context for managing sync lifecycle, cancellation, and status updates
-#[derive(uniffi::Object)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Object))]
 pub struct SyncContext {
     cancellation_token: CancellationToken,
     status_listener: std::sync::Mutex<Option<Arc<dyn SyncStatusListener>>>,
 }
 
-#[uniffi::export]
+#[cfg_attr(feature = "ffi", uniffi::export)]
 impl SyncContext {
     /// Creates a new sync context
-    #[uniffi::constructor]
+    #[cfg_attr(feature = "ffi", uniffi::constructor)]
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             cancellation_token: CancellationToken::new(),

@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 use thiserror::Error;
 
-#[derive(Error, Debug, uniffi::Error)]
-#[uniffi(flat_error)]
+#[derive(Error, Debug)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Error))]
+#[cfg_attr(feature = "ffi", uniffi(flat_error))]
 pub enum SyncError {
     #[error("IO error in file {path}: {source}")]
     IoError {

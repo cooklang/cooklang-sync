@@ -35,7 +35,7 @@ thiserror = "2"
 time = { version = "0.3", features = ["std"] }
 tokio = { version = "1.48", features = ["time", "fs", "macros", "rt-multi-thread"] }
 tokio-util = "0.7"
-uniffi = "0.30"
+uniffi = { version = "0.30", optional = true }
 uuid = { version = "1.18", features = ["v4"] }
 walkdir = "2.5"
 openssl = { version = "0.10", features = ["vendored"] }
@@ -43,6 +43,9 @@ reqwest-middleware = "0.4"
 base64 = "0.22"
 async-stream = "0.3"
 path-slash = "0.2.1"
+
+[features]
+ffi = ["uniffi"]
 
 [dev-dependencies]
 mockall = "0.13"
@@ -56,4 +59,4 @@ tempfile = "3.23"
 # This can be whatever name makes sense for your project, but the rest of this tutorial assumes uniffi-bindgen.
 name = "uniffi-bindgen"
 path = "src/uniffi-bindgen.rs"
-required-features = ["uniffi/cli"]
+required-features = ["ffi", "uniffi/cli"]

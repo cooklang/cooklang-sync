@@ -64,7 +64,7 @@ build() {
     echo "Building $PACKAGE for $target (API level $platform)..."
     (
         cd "$RUST_ROOT"
-        cargo ndk --target "$target" --platform "$platform" build --release --package "$PACKAGE"
+        cargo ndk --target "$target" --platform "$platform" build --release --features ffi --package "$PACKAGE"
     )
 }
 
@@ -76,7 +76,7 @@ generate_bindings() {
 
     (
         cd "$RUST_ROOT"
-        cargo build --package "$PACKAGE" --features uniffi/cli --bin uniffi-bindgen --release
+        cargo build --package "$PACKAGE" --features ffi,uniffi/cli --bin uniffi-bindgen --release
         ./target/release/uniffi-bindgen generate \
             --library "target/aarch64-linux-android/release/lib${LIB}.so" \
             --language kotlin \

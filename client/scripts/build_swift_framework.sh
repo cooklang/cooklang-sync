@@ -62,6 +62,7 @@ build() {
 		cargo build \
 			--lib \
 			--package=$PACKAGE \
+			--features=ffi \
 			--release \
 			--target=$target \
 			--locked
@@ -88,7 +89,7 @@ bindgen() {
 		cd "$RUST_ROOT"
         echo "Generating bindings for $target"
 		cargo run \
-			--features="uniffi/cli" \
+			--features="ffi,uniffi/cli" \
 			--bin uniffi-bindgen \
 			generate \
 			--config uniffi.toml \

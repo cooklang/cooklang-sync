@@ -88,7 +88,8 @@ impl PartialEq<CreateForm> for FileRecord {
 }
 
 /// Sync status enum for communicating sync state to external callers
-#[derive(Debug, Clone, uniffi::Enum)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
 pub enum SyncStatus {
     /// No sync activity is currently happening
     Idle,

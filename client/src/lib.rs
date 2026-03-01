@@ -53,11 +53,12 @@ pub fn extract_uid_from_jwt(token: &str) -> i32 {
     claims.uid
 }
 
+#[cfg(feature = "ffi")]
 uniffi::setup_scaffolding!();
 
 /// Synchronous alias to async run function.
 /// Intended to used by external (written in other languages) callers.
-#[uniffi::export]
+#[cfg_attr(feature = "ffi", uniffi::export)]
 pub fn run(
     context: Arc<SyncContext>,
     storage_dir: &str,
@@ -88,7 +89,7 @@ pub fn run(
 /// when there's a remote update for this client.
 /// Note, it doesn't do the update itself, you need to use `run_download_once`
 /// after this function completes.
-#[uniffi::export]
+#[cfg_attr(feature = "ffi", uniffi::export)]
 pub fn wait_remote_update(api_endpoint: &str, remote_token: &str) -> Result<(), errors::SyncError> {
     Runtime::new()?.block_on(remote::Remote::new(api_endpoint, remote_token).poll())?;
 
@@ -98,7 +99,7 @@ pub fn wait_remote_update(api_endpoint: &str, remote_token: &str) -> Result<(), 
 /// Runs one-off download of updates from remote server.
 /// Note, it's not very efficient as requires to re-initialize DB connection,
 /// chunker, remote client, etc every time it runs.
-#[uniffi::export]
+#[cfg_attr(feature = "ffi", uniffi::export)]
 pub fn run_download_once(
     storage_dir: &str,
     db_file_path: &str,
@@ -133,7 +134,7 @@ pub fn run_download_once(
 /// Runs one-off upload of updates to remote server.
 /// Note, it's not very efficient as requires to re-initialize DB connection,
 /// chunker, remote client, etc every time it runs.
-#[uniffi::export]
+#[cfg_attr(feature = "ffi", uniffi::export)]
 pub fn run_upload_once(
     storage_dir: &str,
     db_file_path: &str,

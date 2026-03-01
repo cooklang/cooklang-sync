@@ -6,8 +6,7 @@ use uuid::Uuid;
 use log::trace;
 
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use reqwest::StatusCode;
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+use reqwest::{Client, StatusCode};
 
 use futures::{Stream, StreamExt};
 
@@ -34,19 +33,16 @@ pub struct Remote {
     api_endpoint: String,
     token: String,
     uuid: String,
-    client: ClientWithMiddleware,
+    client: Client,
 }
 
 impl Remote {
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
-        let rc = reqwest::ClientBuilder::new()
+        let client = Client::builder()
             .gzip(true)
             .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
             .build()
             .unwrap();
-        let client = ClientBuilder::new(rc)
-            // .with(OriginalHeadersMiddleware)
-            .build();
 
         Self {
             api_endpoint: api_endpoint.into(),

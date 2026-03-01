@@ -24,8 +24,6 @@ pub enum SyncError {
     DBQueryError(#[from] diesel::result::Error),
     #[error("Reqwest error {0}")]
     ReqwestError(#[from] reqwest::Error),
-    #[error("Reqwest with middleware error {0}")]
-    ReqwestWirhMiddlewareError(#[from] reqwest_middleware::Error),
     #[error("Error sending value to a channel {0}")]
     ChannelSendError(#[from] futures::channel::mpsc::SendError),
     #[error("Connection init error {0}")]

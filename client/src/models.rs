@@ -3,8 +3,8 @@ use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use diesel::{AsExpression, FromSqlRow};
-
+use diesel::deserialize::FromSqlRow;
+use diesel::expression::AsExpression;
 use diesel::sql_types::Integer;
 
 #[repr(i32)]

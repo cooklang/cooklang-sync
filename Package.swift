@@ -23,7 +23,7 @@ if useLocalXCFramework {
 }
 
 let package = Package(
-    name: "cooklang-sync",
+    name: "CooklangSyncClient",
     platforms: [
         .iOS(.v16),
     ],

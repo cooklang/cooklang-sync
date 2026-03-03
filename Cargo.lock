@@ -428,6 +428,7 @@ dependencies = [
  "diesel_migrations",
  "env_logger",
  "futures",
+ "libsqlite3-sys",
  "log",
  "mockall",
  "notify",

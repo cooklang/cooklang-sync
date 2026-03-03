@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::Mutex;
-use tokio_util::sync::CancellationToken;
 
 use log::debug;
 
@@ -68,12 +67,8 @@ pub fn run(
     namespace_id: i32,
     download_only: bool,
 ) -> Result<(), errors::SyncError> {
-    let token = context.token();
-    let listener = context.listener();
-
     Runtime::new()?.block_on(run_async(
-        token,
-        listener,
+        context,
         storage_dir,
         db_file_path,
         api_endpoint,
@@ -177,8 +172,7 @@ pub fn run_upload_once(
 /// Runs local files watch and sync from/to remote continuously.
 #[allow(clippy::too_many_arguments)]
 pub async fn run_async(
-    token: CancellationToken,
-    listener: Option<Arc<dyn SyncStatusListener>>,
+    context: Arc<SyncContext>,
     storage_dir: &str,
     db_file_path: &str,
     api_endpoint: &str,
@@ -186,6 +180,9 @@ pub async fn run_async(
     namespace_id: i32,
     download_only: bool,
 ) -> Result<(), errors::SyncError> {
+    let token = context.token();
+    let listener = context.listener();
+
     // Initialize all components first
     let (mut debouncer, local_file_update_rx) = async_watcher()?;
     let (local_registry_updated_tx, local_registry_updated_rx) = channel(CHANNEL_SIZE);

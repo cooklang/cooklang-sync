@@ -59,7 +59,7 @@ jobs:
       - name: Generate Swift bindings
         run: |
           mkdir -p target/ios/swift
-          cargo run --package ${{ env.PACKAGE_NAME }} --features uniffi/cli --bin uniffi-bindgen -- generate \
+          cargo run --package ${{ env.PACKAGE_NAME }} --features "ffi uniffi/cli" --bin uniffi-bindgen -- generate \
             --library target/debug/lib${{ env.LIB_NAME }}.dylib \
             --language swift \
             --config client/uniffi.toml \
@@ -189,7 +189,7 @@ jobs:
         run: command -v cargo-ndk || cargo install cargo-ndk --locked
 
       - name: Build uniffi-bindgen for host
-        run: cargo build --package ${{ env.PACKAGE_NAME }} --features uniffi/cli --bin uniffi-bindgen --release
+        run: cargo build --package ${{ env.PACKAGE_NAME }} --features "ffi uniffi/cli" --bin uniffi-bindgen --release
 
       - name: Build host library for bindings generation
         run: |

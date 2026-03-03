@@ -47,17 +47,31 @@ jobs:
 
       - name: Build iOS targets
         run: |
-          cargo build --release --package ${{ env.PACKAGE_NAME }} --target aarch64-apple-ios
-          cargo build --release --package ${{ env.PACKAGE_NAME }} --target aarch64-apple-ios-sim
+          cargo build --release --package ${{ env.PACKAGE_NAME }} --features ffi --target aarch64-apple-ios
+          cargo build --release --package ${{ env.PACKAGE_NAME }} --features ffi --target aarch64-apple-ios-sim
+
+      - name: Build host library for bindings generation
+        run: |
+          # Build debug host library (not stripped) so uniffi-bindgen can read metadata symbols.
+          # The release profile has strip=true which removes symbols uniffi-bindgen needs.
+          cargo build --lib --package ${{ env.PACKAGE_NAME }} --features ffi
 
       - name: Generate Swift bindings
         run: |
           mkdir -p target/ios/swift
           cargo run --package ${{ env.PACKAGE_NAME }} --features uniffi/cli --bin uniffi-bindgen -- generate \
-            --library target/aarch64-apple-ios/release/lib${{ env.LIB_NAME }}.a \
+            --library target/debug/lib${{ env.LIB_NAME }}.dylib \
             --language swift \
             --config client/uniffi.toml \
             --out-dir target/ios/swift
+
+          # Verify bindings were generated
+          SWIFT_COUNT=$(find target/ios/swift -name "*.swift" | wc -l)
+          if [ "$SWIFT_COUNT" -eq 0 ]; then
+            echo "ERROR: No Swift bindings were generated!"
+            exit 1
+          fi
+          echo "Generated $SWIFT_COUNT Swift files"
 
       - name: Create XCFramework
         run: |
@@ -177,22 +191,36 @@ jobs:
       - name: Build uniffi-bindgen for host
         run: cargo build --package ${{ env.PACKAGE_NAME }} --features uniffi/cli --bin uniffi-bindgen --release
 
+      - name: Build host library for bindings generation
+        run: |
+          # Build debug host library (not stripped) so uniffi-bindgen can read metadata symbols.
+          # The release profile has strip=true which removes symbols uniffi-bindgen needs.
+          cargo build --lib --package ${{ env.PACKAGE_NAME }} --features ffi
+
       - name: Build Android targets
         run: |
-          cargo ndk --target aarch64-linux-android --platform 21 build --release --package ${{ env.PACKAGE_NAME }}
-          cargo ndk --target armv7-linux-androideabi --platform 21 build --release --package ${{ env.PACKAGE_NAME }}
-          cargo ndk --target x86_64-linux-android --platform 21 build --release --package ${{ env.PACKAGE_NAME }}
+          cargo ndk --target aarch64-linux-android --platform 21 build --release --package ${{ env.PACKAGE_NAME }} --features ffi
+          cargo ndk --target armv7-linux-androideabi --platform 21 build --release --package ${{ env.PACKAGE_NAME }} --features ffi
+          cargo ndk --target x86_64-linux-android --platform 21 build --release --package ${{ env.PACKAGE_NAME }} --features ffi
 
       - name: Generate Kotlin bindings
         run: |
           rm -rf target/android/kotlin
           mkdir -p target/android/kotlin
+          # Use debug host library (not stripped) so uniffi-bindgen can read metadata symbols.
           ./target/release/uniffi-bindgen generate \
-            --library target/aarch64-linux-android/release/lib${{ env.LIB_NAME }}.so \
+            --library target/debug/lib${{ env.LIB_NAME }}.so \
             --language kotlin \
             --config client/uniffi.toml \
             --out-dir target/android/kotlin
-          echo "Generated Kotlin files:"
+
+          # Verify bindings were generated
+          KT_COUNT=$(find target/android/kotlin -name "*.kt" | wc -l)
+          if [ "$KT_COUNT" -eq 0 ]; then
+            echo "ERROR: No Kotlin bindings were generated!"
+            exit 1
+          fi
+          echo "Generated $KT_COUNT Kotlin files:"
           find target/android/kotlin -name "*.kt" -type f
 
       - name: Organize JNI libraries
@@ -210,8 +238,8 @@ jobs:
           # Copy JNI libs
           cp -R target/android/jniLibs/* target/android/cooklang-sync-android/src/main/jniLibs/
 
-          # Copy Kotlin bindings
-          find target/android/kotlin -name "*.kt" -exec cp {} target/android/cooklang-sync-android/src/main/kotlin/ \;
+          # Copy Kotlin bindings (preserving directory structure)
+          cp -r target/android/kotlin/* target/android/cooklang-sync-android/src/main/kotlin/
 
           # Create build.gradle.kts
           cat > target/android/cooklang-sync-android/build.gradle.kts << 'EOF'
@@ -486,6 +514,17 @@ jobs:
         run: |
           mkdir -p target/android
           unzip cooklang-sync-android.zip -d target/android/
+
+      - name: Verify Kotlin sources exist
+        run: |
+          KT_COUNT=$(find target/android/cooklang-sync-android/src/main/kotlin -name "*.kt" 2>/dev/null | wc -l)
+          if [ "$KT_COUNT" -eq 0 ]; then
+            echo "ERROR: No Kotlin source files found in extracted artifacts!"
+            echo "Contents of src/main/kotlin:"
+            find target/android/cooklang-sync-android/src/main/kotlin -type f 2>/dev/null || echo "(empty)"
+            exit 1
+          fi
+          echo "Found $KT_COUNT Kotlin files in extracted artifacts"
 
       - name: Setup JDK
         uses: actions/setup-java@v4

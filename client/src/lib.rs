@@ -46,8 +46,7 @@ pub fn extract_uid_from_jwt(token: &str) -> i32 {
     let payload = URL_SAFE_NO_PAD
         .decode(parts[1])
         .expect("Failed to decode JWT payload");
-    let claims: Claims =
-        serde_json::from_slice(&payload).expect("Failed to parse JWT claims");
+    let claims: Claims = serde_json::from_slice(&payload).expect("Failed to parse JWT claims");
 
     claims.uid
 }

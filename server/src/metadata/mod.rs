@@ -20,7 +20,7 @@ mod schema;
 use db::{insert_new_record, list as db_list, Db};
 use models::{FileRecord, NewFileRecord};
 
-use notification::{ActiveClients, Client};
+use notification::ActiveClients;
 
 type Result<T, E = Debug<diesel::result::Error>> = std::result::Result<T, E>;
 
@@ -42,7 +42,7 @@ async fn commit(
             let r = NewFileRecord::from_payload_and_user_id(commit_payload, user.id);
             let id: i32 = db.run(move |conn| insert_new_record(conn, r)).await?;
 
-            clients.lock().unwrap().notify(uuid);
+            clients.lock().unwrap().notify(&uuid);
 
             Ok(Json(response::CommitResultStatus::Success(id)))
         }
@@ -75,27 +75,20 @@ async fn poll(
     seconds: u64,
     shutdown: Shutdown,
 ) -> Result<()> {
-    let notification = {
-        let mut data = clients.lock().unwrap();
+    let seconds = notification::clamp_poll_seconds(seconds);
 
-        let client = Client::new(uuid);
-
-        match data.clients.get(&client) {
-            Some(c) => c.notification.clone(),
-            None => {
-                let notification = client.notification.clone();
-                data.clients.insert(client);
-                notification
-            }
-        }
-    };
+    let notification = clients.lock().unwrap().register(&uuid);
 
     let timeout = tokio::time::timeout(Duration::from_secs(seconds), notification.notified());
 
-    tokio::select! {
+    let result = tokio::select! {
         _ = shutdown => Ok(()),
         _ = timeout => Ok(()),
-    }
+    };
+
+    clients.lock().unwrap().remove(&uuid);
+
+    result
 }
 
 pub fn stage() -> AdHoc {

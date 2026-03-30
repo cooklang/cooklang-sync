@@ -31,6 +31,23 @@ pub fn insert_new_record(conn: &mut DbConnection, record: NewFileRecord) -> Resu
         .get_result(conn)
 }
 
+pub fn has_files(conn: &mut DbConnection, user_id: i32) -> Result<bool> {
+    let subquery = file_records::table
+        .filter(file_records::user_id.eq(user_id))
+        .group_by(file_records::path)
+        .select(max(file_records::id))
+        .into_boxed()
+        .select(sql::<diesel::sql_types::Integer>("max(id)"));
+
+    let count: i64 = file_records::table
+        .filter(file_records::id.eq_any(subquery))
+        .filter(file_records::deleted.eq(false))
+        .count()
+        .get_result(conn)?;
+
+    Ok(count > 0)
+}
+
 pub fn list(conn: &mut DbConnection, user_id: i32, jid: i32) -> Result<Vec<FileRecord>> {
     let subquery = file_records::table
         .filter(file_records::user_id.eq(user_id))

@@ -17,7 +17,7 @@ mod request;
 mod response;
 mod schema;
 
-use db::{insert_new_record, list as db_list, Db};
+use db::{has_files as db_has_files, insert_new_record, list as db_list, Db};
 use models::{FileRecord, NewFileRecord};
 
 use notification::{ActiveClients, Client};
@@ -57,6 +57,13 @@ async fn commit(
             )))
         }
     }
+}
+
+#[get("/has_files")]
+async fn has_files(db: Db, user: User) -> Result<Json<bool>> {
+    let result = db.run(move |conn| db_has_files(conn, user.id)).await?;
+
+    Ok(Json(result))
 }
 
 // return back array of jid, path, hashes for all jid since requested
@@ -108,7 +115,7 @@ pub fn stage() -> AdHoc {
                 "Diesel Migrations",
                 middleware::run_migrations,
             ))
-            .mount("/metadata", routes![commit, list, poll])
+            .mount("/metadata", routes![commit, has_files, list, poll])
             .manage(clients)
     })
 }

@@ -31,6 +31,22 @@ pub fn insert_new_record(conn: &mut DbConnection, record: NewFileRecord) -> Resu
         .get_result(conn)
 }
 
+/// Return the most recent record for `(user_id, path)`, or None if this
+/// user has never committed that path.
+pub fn latest_for_path(
+    conn: &mut DbConnection,
+    user_id: i32,
+    path: &str,
+) -> Result<Option<FileRecord>> {
+    file_records::table
+        .filter(file_records::user_id.eq(user_id))
+        .filter(file_records::path.eq(path))
+        .order(file_records::id.desc())
+        .select(FileRecord::as_select())
+        .first::<FileRecord>(conn)
+        .optional()
+}
+
 pub fn has_files(conn: &mut DbConnection, user_id: i32) -> Result<bool> {
     let subquery = file_records::table
         .filter(file_records::user_id.eq(user_id))

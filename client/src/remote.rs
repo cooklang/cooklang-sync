@@ -5,8 +5,14 @@ use uuid::Uuid;
 
 use log::trace;
 
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
 use reqwest::{Client, StatusCode};
+
+/// User-Agent sent on every request, e.g. "cooklang-sync-client/0.4.11".
+/// Lets the server identify the client version in logs when diagnosing
+/// misbehaving clients.
+const CLIENT_USER_AGENT: &str = concat!("cooklang-sync-client/", env!("CARGO_PKG_VERSION"));
+const CLIENT_VERSION_HEADER: &str = "x-client-version";
 
 use futures::{Stream, StreamExt};
 
@@ -38,9 +44,17 @@ pub struct Remote {
 
 impl Remote {
     pub fn new(api_endpoint: &str, token: &str) -> Remote {
+        let mut default_headers = HeaderMap::new();
+        default_headers.insert(USER_AGENT, HeaderValue::from_static(CLIENT_USER_AGENT));
+        default_headers.insert(
+            CLIENT_VERSION_HEADER,
+            HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
+        );
+
         let client = Client::builder()
             .gzip(true)
             .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .default_headers(default_headers)
             .build()
             .unwrap();
 

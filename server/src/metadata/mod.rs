@@ -46,16 +46,21 @@ async fn commit(
             // the existing id without inserting or notifying other clients.
             // Guards against buggy / outdated clients that re-commit unchanged
             // files in a loop.
-            let dedup_path = r.path.clone();
-            let dedup_chunks = r.chunk_ids.clone();
-            let dedup_deleted = r.deleted;
-            let dedup_user = r.user_id;
-            let existing = db
-                .run(move |conn| latest_for_path(conn, dedup_user, &dedup_path))
-                .await?;
+            let existing = {
+                let user_id = r.user_id;
+                let path = r.path.clone();
+                db.run(move |conn| latest_for_path(conn, user_id, &path))
+                    .await?
+            };
 
             if let Some(existing) = existing {
-                if existing.chunk_ids == dedup_chunks && existing.deleted == dedup_deleted {
+                if existing.chunk_ids == r.chunk_ids && existing.deleted == r.deleted {
+                    rocket::info!(
+                        "dedup: no-op commit user_id={} path={:?} existing_id={}",
+                        r.user_id,
+                        r.path,
+                        existing.id
+                    );
                     return Ok(Json(response::CommitResultStatus::Success(existing.id)));
                 }
             }

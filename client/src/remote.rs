@@ -1,3 +1,4 @@
+use futures::{Stream, StreamExt};
 use path_slash::PathExt as _;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -8,15 +9,15 @@ use log::trace;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT};
 use reqwest::{Client, StatusCode};
 
+use crate::errors::SyncError;
+
 /// User-Agent sent on every request, e.g. "cooklang-sync-client/0.4.11".
 /// Lets the server identify the client version in logs when diagnosing
 /// misbehaving clients.
 const CLIENT_USER_AGENT: &str = concat!("cooklang-sync-client/", env!("CARGO_PKG_VERSION"));
+/// Duplicates the version from User-Agent into a dedicated header so log
+/// pipelines can extract the client version without parsing User-Agent.
 const CLIENT_VERSION_HEADER: &str = "x-client-version";
-
-use futures::{Stream, StreamExt};
-
-use crate::errors::SyncError;
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
 pub const REQUEST_TIMEOUT_SECS: u64 = 60;

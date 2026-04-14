@@ -191,7 +191,7 @@ fn build_file_record(path: &Path, base: &Path, namespace_id: i32) -> Result<Crea
     let time = metadata
         .modified()
         .map_err(|e| SyncError::from_io_error(path.clone(), e))?;
-    let modified_at = OffsetDateTime::from(time);
+    let modified_at = truncate_to_seconds(OffsetDateTime::from(time));
 
     let f = CreateForm {
         jid: None,
@@ -205,6 +205,22 @@ fn build_file_record(path: &Path, base: &Path, namespace_id: i32) -> Result<Crea
     Ok(f)
 }
 
+/// Truncate an `OffsetDateTime` to whole-second granularity.
+///
+/// `PartialEq<CreateForm> for FileRecord` compares `modified_at` to detect
+/// local changes. If disk mtime carries sub-second precision (APFS nanoseconds,
+/// ext4 nanoseconds) but the stored-and-read-back value differs below the
+/// second — whether from SQLite round-trip loss or from an external process
+/// bumping mtime without changing content — the indexer keeps "detecting" a
+/// change every cycle and uploading the same content forever. Normalising to
+/// whole seconds on both sides makes the equality stable.
+///
+/// Real content edits advance mtime by at least a whole second in practice,
+/// so this does not lose change detection.
+pub(crate) fn truncate_to_seconds(t: OffsetDateTime) -> OffsetDateTime {
+    t.replace_nanosecond(0).unwrap_or(t)
+}
+
 fn build_delete_form(record: &FileRecord, namespace_id: i32) -> DeleteForm {
     DeleteForm {
         path: record.path.to_string(),
@@ -213,5 +229,41 @@ fn build_delete_form(record: &FileRecord, namespace_id: i32) -> DeleteForm {
         size: record.size,
         modified_at: record.modified_at,
         namespace_id,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dt(nanos: u32) -> OffsetDateTime {
+        OffsetDateTime::UNIX_EPOCH
+            .replace_nanosecond(nanos)
+            .unwrap()
+    }
+
+    #[test]
+    fn truncate_to_seconds_zeroes_subsecond_component() {
+        let truncated = truncate_to_seconds(dt(123_456_789));
+        assert_eq!(truncated.nanosecond(), 0);
+        assert_eq!(truncated, OffsetDateTime::UNIX_EPOCH);
+    }
+
+    #[test]
+    fn truncate_to_seconds_is_idempotent_on_whole_seconds() {
+        let t = OffsetDateTime::UNIX_EPOCH;
+        assert_eq!(truncate_to_seconds(t), t);
+    }
+
+    #[test]
+    fn truncate_to_seconds_makes_roundtrip_equality_stable() {
+        // Simulates: nanosecond-precision mtime read from disk vs a value
+        // round-tripped through storage that may lose precision below the
+        // second. Without truncation these differ; with truncation they match,
+        // so the indexer's equality check is stable.
+        let disk = dt(123_456_789);
+        let stored_roundtrip = dt(123_000_000);
+        assert_ne!(disk, stored_roundtrip);
+        assert_eq!(truncate_to_seconds(disk), truncate_to_seconds(stored_roundtrip));
     }
 }

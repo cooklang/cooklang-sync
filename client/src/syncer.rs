@@ -254,7 +254,13 @@ pub async fn check_download_once(
 
     let conn = &mut get_connection(pool)?;
 
-    let latest_local = registry::latest_jid(conn, namespace_id).unwrap_or(0);
+    // The download watermark is read from a dedicated `sync_state` row and
+    // only advanced after every file in the batch has been persisted. Using
+    // `max(file_records.jid)` here would advance per-file and — because the
+    // server's `list(jid)` filter hides any path whose latest commit id is
+    // at or below `jid` — permanently skip files if a prior batch was
+    // interrupted partway (e.g. process killed, network drop).
+    let latest_local = registry::get_download_watermark(conn, namespace_id).unwrap_or(0);
     let to_download = remote.list(latest_local).await?;
     // TODO maybe should limit one download at a time and use batches
     // it can also overflow in-memory cache
@@ -300,30 +306,51 @@ pub async fn check_download_once(
         }
     }
 
+    // Apply per-file disk changes first. Any failure here bails before we
+    // touch the DB, so the watermark stays put and the next poll retries
+    // the whole batch (chunks already written are reused via the cache).
+    let mut create_forms: Vec<models::CreateForm> = Vec::new();
+    let mut delete_forms: Vec<models::DeleteForm> = Vec::new();
+
     for d in &to_download {
-        trace!("udpating downloaded files {:?}", d);
+        trace!("updating downloaded files {:?}", d);
 
         let mut chunker = chunker.lock().await;
 
         if d.deleted {
-            let form = build_delete_form(&d.path, storage_path, d.id, namespace_id);
-            // TODO atomic?
-            registry::delete(conn, &vec![form])?;
             if chunker.exists(&d.path) {
                 chunker.delete(&d.path).await?;
             }
+            delete_forms.push(build_delete_form(&d.path, storage_path, d.id, namespace_id));
         } else {
             let chunks: Vec<&str> = d.chunk_ids.split(',').collect();
-            // TODO atomic? store in tmp first and then move?
-            // TODO should be after we create record in db
             if let Err(e) = chunker.save(&d.path, chunks).await {
                 error!("{:?}", e);
                 return Err(e);
             }
 
-            let form = build_file_record(&d.path, storage_path, d.id, namespace_id)?;
-            registry::create(conn, &vec![form])?;
+            create_forms.push(build_file_record(&d.path, storage_path, d.id, namespace_id)?);
         }
+    }
+
+    // Atomically persist all file_record writes for this batch together
+    // with the advanced watermark. Either all land or none: a partial
+    // crash after this point still leaves a consistent `(file_records,
+    // sync_state)` pair, and a crash before this point leaves the
+    // watermark untouched so the next poll re-requests the same batch.
+    if let Some(max_id) = to_download.iter().map(|d| d.id).max() {
+        use diesel::connection::Connection as _;
+
+        conn.transaction::<_, diesel::result::Error, _>(|tx_conn| {
+            if !create_forms.is_empty() {
+                registry::create(tx_conn, &create_forms)?;
+            }
+            if !delete_forms.is_empty() {
+                registry::delete(tx_conn, &delete_forms)?;
+            }
+            registry::set_download_watermark(tx_conn, namespace_id, max_id)?;
+            Ok(())
+        })?;
     }
 
     Ok(!to_download.is_empty())

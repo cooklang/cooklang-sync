@@ -12,6 +12,7 @@ use log::{debug, error, trace};
 use crate::chunker::Chunker;
 use crate::connection::{get_connection, ConnectionPool};
 use crate::errors::SyncError;
+use crate::indexer::truncate_to_seconds;
 use crate::models;
 use crate::registry;
 use crate::remote::{CommitResultStatus, Remote};
@@ -344,7 +345,9 @@ fn build_file_record(
     let time = metadata
         .modified()
         .map_err(|e| SyncError::from_io_error(path, e))?;
-    let modified_at = OffsetDateTime::from(time);
+    // Keep mtime precision aligned with the indexer so round-tripping a
+    // downloaded file through the local DB doesn't re-trigger uploads.
+    let modified_at = truncate_to_seconds(OffsetDateTime::from(time));
 
     let form = models::CreateForm {
         jid: Some(jid),
@@ -367,7 +370,7 @@ fn build_delete_form(path: &str, base: &Path, jid: i32, namespace_id: i32) -> mo
         jid: Some(jid),
         deleted: true,
         size: 0,
-        modified_at: OffsetDateTime::now_utc(),
+        modified_at: truncate_to_seconds(OffsetDateTime::now_utc()),
         namespace_id,
     }
 }

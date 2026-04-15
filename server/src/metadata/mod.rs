@@ -17,7 +17,7 @@ mod request;
 mod response;
 mod schema;
 
-use db::{has_files as db_has_files, insert_new_record, list as db_list, Db};
+use db::{has_files as db_has_files, insert_new_record, latest_for_path, list as db_list, Db};
 use models::{FileRecord, NewFileRecord};
 
 use notification::{ActiveClients, Client};
@@ -40,6 +40,31 @@ async fn commit(
     match to_be_uploaded.is_empty() {
         true => {
             let r = NewFileRecord::from_payload_and_user_id(commit_payload, user.id);
+
+            // Dedup: if the latest record for (user_id, path) already has the
+            // same chunk_ids and deleted flag, this commit is a no-op. Return
+            // the existing id without inserting or notifying other clients.
+            // Guards against buggy / outdated clients that re-commit unchanged
+            // files in a loop.
+            let existing = {
+                let user_id = r.user_id;
+                let path = r.path.clone();
+                db.run(move |conn| latest_for_path(conn, user_id, &path))
+                    .await?
+            };
+
+            if let Some(existing) = existing {
+                if existing.chunk_ids == r.chunk_ids && existing.deleted == r.deleted {
+                    rocket::info!(
+                        "dedup: no-op commit user_id={} path={:?} existing_id={}",
+                        r.user_id,
+                        r.path,
+                        existing.id
+                    );
+                    return Ok(Json(response::CommitResultStatus::Success(existing.id)));
+                }
+            }
+
             let id: i32 = db.run(move |conn| insert_new_record(conn, r)).await?;
 
             clients.lock().unwrap().notify(uuid);

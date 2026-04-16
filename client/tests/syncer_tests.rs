@@ -315,3 +315,33 @@ async fn check_download_once_empty_remote_list_is_noop() {
     let rows = registry::non_deleted(conn, NS).expect("non_deleted");
     assert!(rows.is_empty());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_download_once_propagates_unauthorized_from_list() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let mut base = common::client_base();
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let err = check_download_once(
+        &base.pool,
+        Arc::clone(&chunker_arc),
+        &remote,
+        base.dir.path(),
+        NS,
+    )
+    .await
+    .unwrap_err();
+    assert!(
+        matches!(err, SyncError::Unauthorized),
+        "expected SyncError::Unauthorized, got {:?}",
+        err
+    );
+}

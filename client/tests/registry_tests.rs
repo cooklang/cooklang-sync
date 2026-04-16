@@ -213,3 +213,53 @@ fn updated_locally_empty_db_returns_empty_vec() {
     let conn = &mut get_connection(&pool).unwrap();
     assert!(registry::updated_locally(conn, 1).unwrap().is_empty());
 }
+
+#[test]
+fn latest_jid_returns_not_found_on_empty_db() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).unwrap();
+    let err = registry::latest_jid(conn, 1).expect_err("no jid rows = NotFound");
+    assert!(
+        matches!(err, diesel::result::Error::NotFound),
+        "empty DB should produce NotFound, got: {err:?}"
+    );
+}
+
+#[test]
+fn latest_jid_returns_highest_jid_in_namespace_and_ignores_null_jid_rows() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).unwrap();
+
+    // ns 1: three rows, jids 3, 7, and null.
+    registry::create(
+        conn,
+        &vec![
+            sample_create("a.cook", 10, 1),
+            sample_create("b.cook", 20, 1),
+            sample_create("c.cook", 30, 1),
+        ],
+    )
+    .unwrap();
+    let mut rows: Vec<FileRecord> = file_records::table
+        .filter(file_records::namespace_id.eq(1))
+        .select(FileRecord::as_select())
+        .order(file_records::id.asc())
+        .load(conn)
+        .unwrap();
+    rows.sort_by_key(|r| r.id);
+    registry::update_jid(conn, &rows[0], 3).unwrap();
+    registry::update_jid(conn, &rows[1], 7).unwrap();
+    // rows[2] stays jid=None.
+
+    // ns 2: jid 100 — must not bleed into ns 1's latest_jid.
+    registry::create(conn, &vec![sample_create("x.cook", 1, 2)]).unwrap();
+    let x: FileRecord = file_records::table
+        .filter(file_records::namespace_id.eq(2))
+        .select(FileRecord::as_select())
+        .first(conn)
+        .unwrap();
+    registry::update_jid(conn, &x, 100).unwrap();
+
+    assert_eq!(registry::latest_jid(conn, 1).unwrap(), 7);
+    assert_eq!(registry::latest_jid(conn, 2).unwrap(), 100);
+}

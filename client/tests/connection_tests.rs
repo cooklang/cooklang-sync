@@ -42,8 +42,7 @@ fn get_connection_pool_returns_error_for_unwritable_path() {
     // directory, causing SQLite to fail to open the file.
     let bogus = "/dev/null/does_not_exist/db.sqlite3";
     let err = get_connection_pool(bogus)
-        .err()
-        .expect("pool creation should fail on unwritable parent");
+        .expect_err("pool creation should fail on unwritable parent");
     let msg = format!("{err}");
     assert!(
         msg.to_lowercase().contains("connection"),

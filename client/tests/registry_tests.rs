@@ -167,3 +167,49 @@ fn non_deleted_empty_db_returns_empty_vec() {
     let live = registry::non_deleted(conn, 1).unwrap();
     assert!(live.is_empty());
 }
+
+#[test]
+fn updated_locally_returns_latest_null_jid_rows_per_path_scoped_by_namespace() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).expect("checkout");
+
+    // ns 1: create "a.cook" (id 1), sync it (jid=5), re-modify (id 3, null jid).
+    registry::create(conn, &vec![sample_create("a.cook", 10, 1)]).unwrap();
+    let a1: FileRecord = file_records::table
+        .filter(file_records::path.eq("a.cook"))
+        .select(FileRecord::as_select())
+        .first(conn)
+        .unwrap();
+    registry::update_jid(conn, &a1, 5).unwrap();
+
+    let mut a2 = sample_create("a.cook", 11, 1);
+    a2.modified_at = OffsetDateTime::from_unix_timestamp(1_700_000_500).unwrap();
+    registry::create(conn, &vec![a2]).unwrap();
+
+    // ns 1: "b.cook" created and synced — should NOT appear.
+    registry::create(conn, &vec![sample_create("b.cook", 20, 1)]).unwrap();
+    let b: FileRecord = file_records::table
+        .filter(file_records::path.eq("b.cook"))
+        .select(FileRecord::as_select())
+        .first(conn)
+        .unwrap();
+    registry::update_jid(conn, &b, 6).unwrap();
+
+    // ns 2: unrelated unsynced row — must not leak into ns 1.
+    registry::create(conn, &vec![sample_create("x.cook", 30, 2)]).unwrap();
+
+    let pending = registry::updated_locally(conn, 1).unwrap();
+    let paths: Vec<(&str, i64)> = pending.iter().map(|r| (r.path.as_str(), r.size)).collect();
+    assert_eq!(paths, vec![("a.cook", 11)]);
+
+    let pending_ns2 = registry::updated_locally(conn, 2).unwrap();
+    assert_eq!(pending_ns2.len(), 1);
+    assert_eq!(pending_ns2[0].path, "x.cook");
+}
+
+#[test]
+fn updated_locally_empty_db_returns_empty_vec() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).unwrap();
+    assert!(registry::updated_locally(conn, 1).unwrap().is_empty());
+}

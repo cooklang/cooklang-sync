@@ -236,3 +236,50 @@ async fn check_download_once_writes_file_and_inserts_registry_row() {
     assert_eq!(rows[0].path, "a.cook");
     assert_eq!(rows[0].jid, Some(11));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_download_once_removes_local_file_and_appends_tombstone() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 22, "path": "gone.cook", "deleted": true, "chunk_ids": "" }
+        ])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    // No /chunks/download is expected — deleted records skip the download queue.
+
+    let mut base = common::client_base();
+    tokio::fs::write(base.dir.path().join("gone.cook"), b"bye\n").await.unwrap();
+    {
+        let conn = &mut get_connection(&base.pool).expect("checkout");
+        registry::create(conn, &vec![sample_create("gone.cook", 4)]).expect("create");
+    }
+
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    check_download_once(
+        &base.pool,
+        Arc::clone(&chunker_arc),
+        &remote,
+        base.dir.path(),
+        NS,
+    )
+    .await
+    .expect("check_download_once");
+
+    // File is gone on disk.
+    assert!(
+        !base.dir.path().join("gone.cook").exists(),
+        "local file should be deleted when remote says deleted"
+    );
+    // Registry has a tombstone appended (latest row for this path has deleted=true).
+    let conn = &mut get_connection(&base.pool).expect("checkout");
+    let live = registry::non_deleted(conn, NS).expect("non_deleted");
+    assert!(
+        live.iter().all(|r| r.path != "gone.cook"),
+        "gone.cook should not be in non_deleted after tombstone applied"
+    );
+}

@@ -65,6 +65,25 @@ fn notify_status_forwards_to_listener() {
 }
 
 #[test]
+fn on_complete_forwards_success_and_failure_with_message() {
+    // SyncContext has no `notify_complete` method — lib.rs reaches for the
+    // listener via `ctx.listener()` and calls `on_complete(..)` directly.
+    // Mirror that shape here so the test fails fast if either half moves.
+    let ctx = SyncContext::new();
+    let listener: Arc<RecordingListener> = Arc::new(RecordingListener::default());
+    ctx.set_listener(listener.clone() as Arc<dyn SyncStatusListener>);
+
+    let got = ctx.listener().expect("listener set");
+    got.on_complete(true, None);
+    got.on_complete(false, Some("boom".into()));
+
+    assert_eq!(
+        listener.completions(),
+        vec![(true, None), (false, Some("boom".to_string()))]
+    );
+}
+
+#[test]
 fn notify_status_without_listener_is_silent() {
     let ctx = SyncContext::new();
     // Should not panic.

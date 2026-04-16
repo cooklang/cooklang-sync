@@ -546,8 +546,12 @@ mod tests {
             .hashify("does_not_exist.cook")
             .await
             .expect_err("hashify on missing file should error");
-        // We only assert it is an error; the specific variant is implementation-dependent.
-        let _ = format!("{err:?}");
+        // `.cook` hits the text branch; File::open failure is wrapped via
+        // SyncError::from_io_error into SyncError::IoError { .. }.
+        assert!(
+            matches!(err, SyncError::IoError { .. }),
+            "expected SyncError::IoError for missing file, got {err:?}"
+        );
     }
 
     #[tokio::test]
@@ -562,7 +566,11 @@ mod tests {
             .save("out.cook", vec![phantom])
             .await
             .expect_err("save should fail when chunk is not available");
-        let _ = format!("{err:?}");
+        // The missing-chunk branch returns GetFromCacheError from read_chunk().
+        assert!(
+            matches!(err, SyncError::GetFromCacheError),
+            "expected SyncError::GetFromCacheError for unknown chunk, got {err:?}"
+        );
     }
 
     #[tokio::test]
@@ -587,6 +595,37 @@ mod tests {
             !temp.path().join(path).exists(),
             "file should be gone after Chunker::delete"
         );
+    }
+
+    #[tokio::test]
+    async fn hashify_then_read_chunk_round_trip_via_cache() {
+        // Exercises the save_chunk → read_chunk → check_chunk paths together.
+        // hashify_text splits a file into line chunks and stores each chunk
+        // bytes-for-bytes in the cache keyed by its hash; read_chunk must
+        // return those bytes verbatim for any hash hashify produced.
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(100, 10_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        let path = "round.cook";
+        let body = b"alpha\nbeta\n"; // two newline-terminated chunks
+        tokio::fs::write(temp.path().join(path), body).await.unwrap();
+
+        let hashes = chunker.hashify(path).await.expect("hashify");
+        assert_eq!(hashes.len(), 2, "two-line file produces two chunks");
+
+        // Every hash hashify yielded must be resolvable via check_chunk and
+        // read_chunk. Concatenating the chunk bytes reconstructs the file.
+        let mut recovered = Vec::new();
+        for h in &hashes {
+            assert!(
+                chunker.check_chunk(h),
+                "hashify must populate the cache for every hash it returns"
+            );
+            let bytes = chunker.read_chunk(h).expect("read_chunk on known hash");
+            recovered.extend_from_slice(&bytes);
+        }
+        assert_eq!(recovered, body, "chunks concatenate back to the original bytes");
     }
 
     #[tokio::test]

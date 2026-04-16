@@ -84,7 +84,7 @@ fn update_jid_sets_jid_and_preserves_other_columns() {
     assert_eq!(after.path, original_path);
     assert_eq!(after.size, original_size);
     assert_eq!(after.modified_at, original_mtime);
-    assert_eq!(after.deleted, false);
+    assert!(!after.deleted);
 }
 
 #[test]
@@ -97,7 +97,7 @@ fn delete_appends_tombstone_row_rather_than_updating() {
         .select(FileRecord::as_select())
         .first(conn)
         .unwrap();
-    assert_eq!(live.deleted, false);
+    assert!(!live.deleted);
 
     let n = registry::delete(conn, &vec![sample_delete(&live)]).expect("delete");
     assert_eq!(n, 1);
@@ -110,8 +110,8 @@ fn delete_appends_tombstone_row_rather_than_updating() {
         .load(conn)
         .unwrap();
     assert_eq!(rows.len(), 2, "delete is append-only; original row is preserved");
-    assert_eq!(rows[0].deleted, false);
-    assert_eq!(rows[1].deleted, true);
+    assert!(!rows[0].deleted);
+    assert!(rows[1].deleted);
     assert!(rows[1].id > rows[0].id, "tombstone id must be newer");
 }
 

@@ -86,3 +86,31 @@ fn update_jid_sets_jid_and_preserves_other_columns() {
     assert_eq!(after.modified_at, original_mtime);
     assert_eq!(after.deleted, false);
 }
+
+#[test]
+fn delete_appends_tombstone_row_rather_than_updating() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).expect("checkout");
+
+    registry::create(conn, &vec![sample_create("a.cook", 10, 1)]).unwrap();
+    let live: FileRecord = file_records::table
+        .select(FileRecord::as_select())
+        .first(conn)
+        .unwrap();
+    assert_eq!(live.deleted, false);
+
+    let n = registry::delete(conn, &vec![sample_delete(&live)]).expect("delete");
+    assert_eq!(n, 1);
+
+    // Two rows for the same path: original (live) + appended tombstone.
+    let rows: Vec<FileRecord> = file_records::table
+        .filter(file_records::path.eq("a.cook"))
+        .select(FileRecord::as_select())
+        .order(file_records::id.asc())
+        .load(conn)
+        .unwrap();
+    assert_eq!(rows.len(), 2, "delete is append-only; original row is preserved");
+    assert_eq!(rows[0].deleted, false);
+    assert_eq!(rows[1].deleted, true);
+    assert!(rows[1].id > rows[0].id, "tombstone id must be newer");
+}

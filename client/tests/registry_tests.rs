@@ -56,3 +56,33 @@ fn create_inserts_rows_and_returns_count() {
     assert!(all[0].jid.is_none(), "new rows must have no jid yet");
     assert!(all[0].id < all[1].id, "id must be monotonic");
 }
+
+#[test]
+fn update_jid_sets_jid_and_preserves_other_columns() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).expect("checkout");
+
+    registry::create(conn, &vec![sample_create("a.cook", 42, 1)]).unwrap();
+
+    let row: FileRecord = file_records::table
+        .select(FileRecord::as_select())
+        .first(conn)
+        .expect("row");
+    assert!(row.jid.is_none());
+    let original_path = row.path.clone();
+    let original_size = row.size;
+    let original_mtime = row.modified_at;
+
+    let n = registry::update_jid(conn, &row, 7).expect("update_jid");
+    assert_eq!(n, 1);
+
+    let after: FileRecord = file_records::table
+        .select(FileRecord::as_select())
+        .first(conn)
+        .expect("reload");
+    assert_eq!(after.jid, Some(7));
+    assert_eq!(after.path, original_path);
+    assert_eq!(after.size, original_size);
+    assert_eq!(after.modified_at, original_mtime);
+    assert_eq!(after.deleted, false);
+}

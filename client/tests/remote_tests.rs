@@ -160,3 +160,56 @@ async fn list_maps_401_to_unauthorized() {
     let err = remote.list(0).await.unwrap_err();
     assert!(matches!(err, SyncError::Unauthorized));
 }
+
+#[tokio::test]
+async fn poll_returns_ok_on_200() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/poll"))
+        .and(query_param_contains("uuid", "-"))
+        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    remote.poll().await.expect("poll should succeed on 200");
+}
+
+#[tokio::test]
+async fn poll_maps_401_to_unauthorized() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/poll"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.poll().await.unwrap_err();
+    assert!(matches!(err, SyncError::Unauthorized));
+}
+
+#[tokio::test]
+async fn poll_treats_client_timeout_as_ok() {
+    use cooklang_sync_client::remote::REQUEST_TIMEOUT_SECS;
+    use std::time::Duration;
+
+    let server = MockServer::start().await;
+    // Respond *after* the client's request timeout expires.
+    Mock::given(method("GET"))
+        .and(path("/metadata/poll"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_delay(Duration::from_secs(REQUEST_TIMEOUT_SECS + 5)),
+        )
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    // `poll` deliberately swallows reqwest::Error::is_timeout and returns Ok(()).
+    remote.poll().await.expect("timeout should be mapped to Ok(())");
+}

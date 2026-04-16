@@ -219,7 +219,7 @@ mod tests {
 
         assert_eq!(form.jid, Some(42));
         assert_eq!(form.path, "recipes/test.cook");
-        assert_eq!(form.deleted, false);
+        assert!(!form.deleted);
         assert_eq!(form.size, 512);
         assert_eq!(form.namespace_id, 5);
     }
@@ -238,7 +238,7 @@ mod tests {
         };
 
         assert_eq!(form.path, "recipes/deleted.cook");
-        assert_eq!(form.deleted, true);
+        assert!(form.deleted);
         assert_eq!(form.size, 0);
     }
 

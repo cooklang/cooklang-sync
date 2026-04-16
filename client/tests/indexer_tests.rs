@@ -207,3 +207,16 @@ fn check_index_once_skips_symlinks() {
     assert_eq!(paths, vec!["real.cook".to_string()],
         "symlink entry must be skipped by filter_eligible");
 }
+
+#[test]
+fn check_index_once_on_empty_dir_is_noop() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let storage = TempDir::new().expect("tempdir");
+
+    let changed = check_index_once(&pool, storage.path(), 1).expect("check_index_once");
+    assert!(!changed, "empty dir must return Ok(false)");
+
+    let conn = &mut get_connection(&pool).expect("checkout");
+    let rows = registry::non_deleted(conn, 1).expect("non_deleted");
+    assert!(rows.is_empty(), "empty dir must not produce any registry rows");
+}

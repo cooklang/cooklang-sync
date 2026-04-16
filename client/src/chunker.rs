@@ -565,22 +565,27 @@ mod tests {
         let _ = format!("{err:?}");
     }
 
-    #[test]
-    fn delete_chunk_read_after_eviction_returns_error() {
-        // The Chunker has no delete_chunk API: chunks live only in InMemoryCache and
-        // there is no per-chunk deletion method. This test verifies the equivalent
-        // invariant: reading a hash that was never stored returns an error.
+    #[tokio::test]
+    async fn delete_removes_file_from_storage_dir() {
+        let temp = tempfile::TempDir::new().unwrap();
         let cache = InMemoryCache::new(100, 10_000);
-        let chunker = Chunker::new(cache, PathBuf::from("/tmp"));
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
 
-        let data = b"alpha".to_vec();
-        let hash = chunker.hash(&data, 16);
+        // Write a file into the storage dir, then delete via Chunker::delete.
+        let path = "recipe.cook";
+        tokio::fs::write(temp.path().join(path), b"eggs\n")
+            .await
+            .unwrap();
+        assert!(temp.path().join(path).exists(), "precondition: file written");
 
-        // Never call save_chunk — hash is not in cache.
-        let post = chunker.read_chunk(&hash);
+        chunker
+            .delete(path)
+            .await
+            .expect("Chunker::delete should succeed on existing file");
+
         assert!(
-            post.is_err(),
-            "read_chunk for an unstored hash should error; got: {post:?}"
+            !temp.path().join(path).exists(),
+            "file should be gone after Chunker::delete"
         );
     }
 

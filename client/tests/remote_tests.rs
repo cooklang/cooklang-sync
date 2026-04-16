@@ -268,3 +268,35 @@ async fn upload_batch_maps_401_to_unauthorized() {
     let err = remote.upload_batch(vec![("c1".into(), b"x".to_vec())]).await.unwrap_err();
     assert!(matches!(err, SyncError::Unauthorized));
 }
+
+#[tokio::test]
+async fn download_returns_body_bytes_on_200() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/chunks/xyz"))
+        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"payload".to_vec()))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let bytes = remote.download("xyz").await.expect("download");
+    assert_eq!(bytes, b"payload");
+}
+
+#[tokio::test]
+async fn download_maps_401_to_unauthorized() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/chunks/xyz"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.download("xyz").await.unwrap_err();
+    assert!(matches!(err, SyncError::Unauthorized));
+}

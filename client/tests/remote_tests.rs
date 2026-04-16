@@ -213,3 +213,58 @@ async fn poll_treats_client_timeout_as_ok() {
     // `poll` deliberately swallows reqwest::Error::is_timeout and returns Ok(()).
     remote.poll().await.expect("timeout should be mapped to Ok(())");
 }
+
+#[tokio::test]
+async fn upload_posts_raw_body_to_chunk_path() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/abc123"))
+        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    remote.upload("abc123", b"hello".to_vec()).await.expect("upload");
+}
+
+#[tokio::test]
+async fn upload_batch_posts_multipart_with_each_chunk_as_named_part() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/upload"))
+        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        // Content-Type includes the generated boundary.
+        .and(header_exists("content-type"))
+        // Each chunk is a form-data part whose `name=` is its chunk_id.
+        .and(body_string_contains(r#"Content-Disposition: form-data; name="c1""#))
+        .and(body_string_contains(r#"Content-Disposition: form-data; name="c2""#))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let chunks = vec![
+        ("c1".to_string(), b"hello".to_vec()),
+        ("c2".to_string(), b"world".to_vec()),
+    ];
+    remote.upload_batch(chunks).await.expect("upload_batch");
+}
+
+#[tokio::test]
+async fn upload_batch_maps_401_to_unauthorized() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/upload"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.upload_batch(vec![("c1".into(), b"x".to_vec())]).await.unwrap_err();
+    assert!(matches!(err, SyncError::Unauthorized));
+}

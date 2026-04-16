@@ -260,3 +260,16 @@ fn check_index_once_does_not_tombstone_just_downloaded_file() {
     assert_eq!(live[0].path, rel);
     assert!(!live[0].deleted, "downloaded file must not be soft-deleted by the indexer");
 }
+
+#[test]
+fn check_index_once_on_empty_dir_is_noop() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let storage = TempDir::new().expect("tempdir");
+
+    let changed = check_index_once(&pool, storage.path(), 1).expect("check_index_once");
+    assert!(!changed, "empty dir must return Ok(false)");
+
+    let conn = &mut get_connection(&pool).expect("checkout");
+    let rows = registry::non_deleted(conn, 1).expect("non_deleted");
+    assert!(rows.is_empty(), "empty dir must not produce any registry rows");
+}

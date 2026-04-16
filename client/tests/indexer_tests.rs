@@ -49,6 +49,7 @@ fn check_index_once_records_new_file() {
     assert!(!live[0].deleted);
     assert!(live[0].jid.is_none(), "indexer records are always unsynced");
     assert!(live[0].size > 0);
+    assert_eq!(live[0].namespace_id, NS, "row must be scoped to the requested namespace");
 }
 
 #[test]
@@ -91,7 +92,11 @@ fn check_index_once_appends_a_new_row_when_file_is_modified() {
         .load(conn)
         .unwrap();
     assert_eq!(rows.len(), 2, "modified file => new CreateForm appended, not in-place update");
-    assert!(rows[0].size != rows[1].size || rows[0].modified_at != rows[1].modified_at);
+    // The test deliberately changed BOTH the content length and the mtime, so
+    // both signals must differ; asserting each catches regressions where only
+    // one diff path survives.
+    assert_ne!(rows[0].size, rows[1].size);
+    assert!(rows[1].modified_at >= rows[0].modified_at);
 
     // non_deleted yields the newer row.
     let live = registry::non_deleted(conn, NS).unwrap();

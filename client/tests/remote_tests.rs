@@ -5,6 +5,7 @@
 //! per-instance `uuid` that `Remote` mints at construction.
 
 use cooklang_sync_client::remote::{CommitResultStatus, Remote, ResponseFileRecord};
+use futures::StreamExt;
 use wiremock::matchers::{
     body_string_contains, header, header_exists, method, path, query_param, query_param_contains,
 };
@@ -299,4 +300,77 @@ async fn download_maps_401_to_unauthorized() {
     let remote = new_remote(&server);
     let err = remote.download("xyz").await.unwrap_err();
     assert!(matches!(err, SyncError::Unauthorized));
+}
+
+#[tokio::test]
+async fn download_batch_streams_parts_keyed_by_x_chunk_id_header() {
+    let server = MockServer::start().await;
+
+    // Hand-assemble a tiny multipart body that mirrors the server's format.
+    // The parser in remote.rs looks for `--{boundary}` separators, then a
+    // `X-Chunk-ID:` line inside the part headers, then the bytes up to the
+    // next boundary.
+    let boundary = "testboundary";
+    let body = format!(
+        "--{b}\r\n\
+         X-Chunk-ID: c1\r\n\
+         Content-Type: application/octet-stream\r\n\r\n\
+         hello\r\n\
+         --{b}\r\n\
+         X-Chunk-ID: c2\r\n\
+         Content-Type: application/octet-stream\r\n\r\n\
+         world\r\n\
+         --{b}--\r\n",
+        b = boundary
+    );
+
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .and(body_string_contains("chunk_ids%5B%5D=c1"))
+        .and(body_string_contains("chunk_ids%5B%5D=c2"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", format!("multipart/form-data; boundary={}", boundary).as_str())
+                .set_body_bytes(body.into_bytes()),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let mut stream = remote.download_batch(vec!["c1", "c2"]).await;
+
+    let mut got: Vec<(String, Vec<u8>)> = Vec::new();
+    while let Some(item) = stream.next().await {
+        got.push(item.expect("part ok"));
+    }
+
+    // Order is not guaranteed by the parser, so sort by chunk id.
+    got.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(got.len(), 2);
+    assert_eq!(got[0].0, "c1");
+    assert_eq!(got[0].1, b"hello");
+    assert_eq!(got[1].0, "c2");
+    assert_eq!(got[1].1, b"world");
+}
+
+#[tokio::test]
+async fn download_batch_errors_when_content_type_is_missing() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(ResponseTemplate::new(200).set_body_bytes(b"whatever".to_vec()))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let mut stream = remote.download_batch(vec!["c1"]).await;
+    let first = stream.next().await.expect("at least one item").unwrap_err();
+    assert!(
+        matches!(first, SyncError::BatchDownloadError(_)),
+        "expected BatchDownloadError on missing content-type, got {:?}",
+        first
+    );
 }

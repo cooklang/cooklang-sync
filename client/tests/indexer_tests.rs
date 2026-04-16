@@ -96,7 +96,11 @@ fn check_index_once_appends_a_new_row_when_file_is_modified() {
     // both signals must differ; asserting each catches regressions where only
     // one diff path survives.
     assert_ne!(rows[0].size, rows[1].size);
-    assert!(rows[1].modified_at >= rows[0].modified_at);
+    assert!(
+        rows[1].modified_at > rows[0].modified_at,
+        "mtime must strictly advance after the >=1.1s sleep; if equal, either the \
+         sleep was too short or truncate_to_seconds collapsed both readings"
+    );
 
     // non_deleted yields the newer row.
     let live = registry::non_deleted(conn, NS).unwrap();

@@ -24,7 +24,7 @@ async fn run_emits_update_event_on_initial_scan_and_on_subsequent_fs_event() {
     // Seed one file BEFORE the loop starts so the initial scan finds work.
     fs::write(storage.path().join("a.cook"), b"v1").unwrap();
 
-    let (fs_tx, fs_rx) = mpsc::channel::<notify_debouncer_mini::DebounceEventResult>(8);
+    let (mut fs_tx, fs_rx) = mpsc::channel::<notify_debouncer_mini::DebounceEventResult>(8);
     let (updated_tx, mut updated_rx) = mpsc::channel::<IndexerUpdateEvent>(8);
 
     let token = CancellationToken::new();
@@ -56,8 +56,8 @@ async fn run_emits_update_event_on_initial_scan_and_on_subsequent_fs_event() {
     //    Sleep >1s so modified_at truncated-to-seconds differs from the seed.
     tokio::time::sleep(Duration::from_millis(1100)).await;
     fs::write(storage.path().join("b.cook"), b"new").unwrap();
+    // Empty payload is fine — the run loop re-scans regardless of event contents.
     fs_tx
-        .clone()
         .send(Ok(Vec::new()))
         .await
         .expect("push synthetic debounce event");

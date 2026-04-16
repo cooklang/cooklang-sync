@@ -535,4 +535,71 @@ mod tests {
         // Should clamp to minimum of 1
         assert_eq!(weighter.weight(&key, &empty_val), 1);
     }
+
+    #[tokio::test]
+    async fn hashify_errors_on_missing_file() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(100, 10_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        let err = chunker
+            .hashify("does_not_exist.cook")
+            .await
+            .expect_err("hashify on missing file should error");
+        // We only assert it is an error; the specific variant is implementation-dependent.
+        let _ = format!("{err:?}");
+    }
+
+    #[tokio::test]
+    async fn save_errors_when_referenced_chunk_is_missing() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(100, 10_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        // Reference a hash that was never stored.
+        let phantom = "deadbeefdeadbeefdeadbeefdeadbeef";
+        let err = chunker
+            .save("out.cook", vec![phantom])
+            .await
+            .expect_err("save should fail when chunk is not available");
+        let _ = format!("{err:?}");
+    }
+
+    #[test]
+    fn delete_chunk_read_after_eviction_returns_error() {
+        // The Chunker has no delete_chunk API: chunks live only in InMemoryCache and
+        // there is no per-chunk deletion method. This test verifies the equivalent
+        // invariant: reading a hash that was never stored returns an error.
+        let cache = InMemoryCache::new(100, 10_000);
+        let chunker = Chunker::new(cache, PathBuf::from("/tmp"));
+
+        let data = b"alpha".to_vec();
+        let hash = chunker.hash(&data, 16);
+
+        // Never call save_chunk — hash is not in cache.
+        let post = chunker.read_chunk(&hash);
+        assert!(
+            post.is_err(),
+            "read_chunk for an unstored hash should error; got: {post:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn hashify_text_file_with_multiple_lines_produces_multiple_chunks() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(1000, 100_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        let content = "line-a\nline-b\nline-c\n";
+        tokio::fs::write(temp.path().join("multi.cook"), content.as_bytes())
+            .await
+            .unwrap();
+
+        let hashes = chunker.hashify("multi.cook").await.unwrap();
+        assert_eq!(
+            hashes.len(),
+            3,
+            "three newline-terminated lines should yield three text chunks; got {hashes:?}"
+        );
+    }
 }

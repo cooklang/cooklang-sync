@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use diesel::r2d2::{ConnectionManager, Pool, PooledConnection};
 use diesel::SqliteConnection;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
@@ -14,11 +12,7 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
 pub fn get_connection_pool(db_path: &str) -> Result<ConnectionPool, SyncError> {
     let manager = ConnectionManager::<SqliteConnection>::new(db_path);
 
-    let pool = match Pool::builder()
-        .test_on_check_out(true)
-        .connection_timeout(Duration::from_secs(1))
-        .build(manager)
-    {
+    let pool = match Pool::builder().test_on_check_out(true).build(manager) {
         Ok(p) => p,
         Err(e) => return Err(SyncError::ConnectionInitError(e.to_string())),
     };

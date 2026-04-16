@@ -283,3 +283,35 @@ async fn check_download_once_removes_local_file_and_appends_tombstone() {
         "gone.cook should not be in non_deleted after tombstone applied"
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_download_once_empty_remote_list_is_noop() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    // No /chunks/download should be hit; wiremock will error on unmatched paths
+    // when we assert on a mounted mock. We omit that mock deliberately.
+
+    let mut base = common::client_base();
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let downloaded = check_download_once(
+        &base.pool,
+        Arc::clone(&chunker_arc),
+        &remote,
+        base.dir.path(),
+        NS,
+    )
+    .await
+    .expect("check_download_once");
+    assert!(!downloaded, "empty list => returns false");
+
+    // Registry is still empty.
+    let conn = &mut get_connection(&base.pool).expect("checkout");
+    let rows = registry::non_deleted(conn, NS).expect("non_deleted");
+    assert!(rows.is_empty());
+}

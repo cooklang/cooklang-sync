@@ -65,3 +65,42 @@ async fn commit_returns_need_chunks_on_2xx_with_need_chunks_payload() {
         other => panic!("expected NeedChunks, got {:?}", other),
     }
 }
+
+#[tokio::test]
+async fn commit_maps_401_to_unauthorized() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/metadata/commit"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.commit("a.cook", false, "").await.unwrap_err();
+    assert!(
+        matches!(err, SyncError::Unauthorized),
+        "expected SyncError::Unauthorized on 401, got {:?}",
+        err
+    );
+}
+
+#[tokio::test]
+async fn commit_maps_5xx_to_unknown_with_status_in_message() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/metadata/commit"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.commit("a.cook", false, "").await.unwrap_err();
+    match err {
+        SyncError::Unknown(msg) => assert!(msg.contains("503"), "expected status in message, got {msg:?}"),
+        other => panic!("expected SyncError::Unknown on 5xx, got {:?}", other),
+    }
+}

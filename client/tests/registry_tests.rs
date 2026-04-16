@@ -263,3 +263,38 @@ fn latest_jid_returns_highest_jid_in_namespace_and_ignores_null_jid_rows() {
     assert_eq!(registry::latest_jid(conn, 1).unwrap(), 7);
     assert_eq!(registry::latest_jid(conn, 2).unwrap(), 100);
 }
+
+#[test]
+fn updated_locally_surfaces_unsynced_tombstone() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).expect("checkout");
+
+    // Create then delete (tombstone is appended; jid still None on both rows).
+    registry::create(conn, &vec![sample_create("gone.cook", 10, 1)]).expect("create");
+    let existing: Vec<FileRecord> = registry::non_deleted(conn, 1).expect("non_deleted");
+    let sample = existing.first().expect("row present");
+    registry::delete(conn, &vec![sample_delete(sample)]).expect("delete");
+
+    // Latest row per path is the tombstone, which still has jid=None, so
+    // updated_locally must surface it - this is what lets the upload path
+    // retry tombstones that never reached the server.
+    let unsynced = registry::updated_locally(conn, 1).expect("updated_locally");
+    assert_eq!(unsynced.len(), 1, "tombstone with jid=None must appear in updated_locally");
+    assert_eq!(unsynced[0].path, "gone.cook");
+    assert!(unsynced[0].deleted, "latest row is the tombstone");
+    assert!(unsynced[0].jid.is_none());
+}
+
+#[test]
+fn latest_jid_returns_zero_for_explicit_jid_zero() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).expect("checkout");
+
+    // Insert a single row with jid=Some(0).
+    let mut form = sample_create("a.cook", 5, 1);
+    form.jid = Some(0);
+    registry::create(conn, &vec![form]).expect("create");
+
+    let latest = registry::latest_jid(conn, 1).expect("latest_jid");
+    assert_eq!(latest, 0, "Some(0) must unwrap to 0, not NotFound");
+}

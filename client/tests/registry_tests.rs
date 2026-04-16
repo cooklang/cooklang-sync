@@ -173,7 +173,8 @@ fn updated_locally_returns_latest_null_jid_rows_per_path_scoped_by_namespace() {
     let (pool, _dir) = common::fresh_client_pool();
     let conn = &mut get_connection(&pool).expect("checkout");
 
-    // ns 1: create "a.cook" (id 1), sync it (jid=5), re-modify (id 3, null jid).
+    // ns 1: create "a.cook" (id 1), sync it (jid=5), re-modify (id 2, null jid).
+    // Then b.cook (id 3, synced) and a ns-2 row (id 4) are added below.
     registry::create(conn, &vec![sample_create("a.cook", 10, 1)]).unwrap();
     let a1: FileRecord = file_records::table
         .filter(file_records::path.eq("a.cook"))
@@ -240,13 +241,12 @@ fn latest_jid_returns_highest_jid_in_namespace_and_ignores_null_jid_rows() {
         ],
     )
     .unwrap();
-    let mut rows: Vec<FileRecord> = file_records::table
+    let rows: Vec<FileRecord> = file_records::table
         .filter(file_records::namespace_id.eq(1))
         .select(FileRecord::as_select())
         .order(file_records::id.asc())
         .load(conn)
         .unwrap();
-    rows.sort_by_key(|r| r.id);
     registry::update_jid(conn, &rows[0], 3).unwrap();
     registry::update_jid(conn, &rows[1], 7).unwrap();
     // rows[2] stays jid=None.

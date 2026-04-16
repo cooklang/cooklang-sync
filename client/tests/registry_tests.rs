@@ -114,3 +114,56 @@ fn delete_appends_tombstone_row_rather_than_updating() {
     assert_eq!(rows[1].deleted, true);
     assert!(rows[1].id > rows[0].id, "tombstone id must be newer");
 }
+
+#[test]
+fn non_deleted_returns_latest_live_row_per_path_scoped_by_namespace() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).expect("checkout");
+
+    // Namespace 1: "a.cook" created, then re-created (modified), then namespace 2
+    // has its own unrelated "a.cook".
+    registry::create(
+        conn,
+        &vec![
+            sample_create("a.cook", 10, 1), // id 1 (ns 1, old)
+            sample_create("b.cook", 20, 1), // id 2 (ns 1)
+        ],
+    )
+    .unwrap();
+
+    // Modified-file path: append a new CreateForm with a larger size.
+    let mut modified = sample_create("a.cook", 11, 1);
+    modified.modified_at = OffsetDateTime::from_unix_timestamp(1_700_000_500).unwrap();
+    registry::create(conn, &vec![modified]).unwrap(); // id 3 (ns 1, newer)
+
+    // A deleted file in ns 1.
+    registry::create(conn, &vec![sample_create("c.cook", 30, 1)]).unwrap(); // id 4
+    let c: FileRecord = file_records::table
+        .filter(file_records::path.eq("c.cook"))
+        .select(FileRecord::as_select())
+        .first(conn)
+        .unwrap();
+    registry::delete(conn, &vec![sample_delete(&c)]).unwrap(); // id 5 (tombstone)
+
+    // Namespace 2 rows must not leak into namespace 1.
+    registry::create(conn, &vec![sample_create("a.cook", 999, 2)]).unwrap(); // id 6
+
+    let live = registry::non_deleted(conn, 1).expect("non_deleted ns 1");
+    let paths: Vec<(&str, i64)> = live.iter().map(|r| (r.path.as_str(), r.size)).collect();
+    // Expect: b.cook (id 2) then a.cook (id 3, latest live row). c.cook is hidden
+    // (tombstone is latest). Order is by `id.asc()` per `non_deleted`'s SQL.
+    assert_eq!(paths, vec![("b.cook", 20), ("a.cook", 11)]);
+
+    let live_ns2 = registry::non_deleted(conn, 2).unwrap();
+    assert_eq!(live_ns2.len(), 1);
+    assert_eq!(live_ns2[0].path, "a.cook");
+    assert_eq!(live_ns2[0].size, 999);
+}
+
+#[test]
+fn non_deleted_empty_db_returns_empty_vec() {
+    let (pool, _dir) = common::fresh_client_pool();
+    let conn = &mut get_connection(&pool).expect("checkout");
+    let live = registry::non_deleted(conn, 1).unwrap();
+    assert!(live.is_empty());
+}

@@ -30,7 +30,13 @@ fn get_connection_pool_creates_db_and_runs_migrations() {
     assert_eq!(count, 0, "fresh DB should have zero rows in file_records");
 }
 
+// This test exercises the ConnectionInitError branch by giving get_connection_pool
+// an unwritable path. It is marked #[ignore] because r2d2 retries failed connection
+// establishment for its default `connection_timeout` (30s) before surfacing the
+// error — making the test slow in an ordinary `cargo test` run. Run it explicitly
+// with `cargo test -- --ignored` when you want to verify the error path.
 #[test]
+#[ignore = "slow: r2d2 retries failed establish for ~30s"]
 fn get_connection_pool_returns_error_for_unwritable_path() {
     // On macOS, /dev/null is a character device so any sub-path is not a valid
     // directory, causing SQLite to fail to open the file.

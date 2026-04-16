@@ -54,3 +54,23 @@ fn base64_url_nopad(bytes: &[u8]) -> String {
     use base64::Engine;
     URL_SAFE_NO_PAD.encode(bytes)
 }
+
+use cooklang_sync_client::chunker::{Chunker, InMemoryCache};
+
+/// Bundle of the three things every syncer integration test needs:
+/// a fresh SQLite pool, a tempdir root, and a `Chunker` rooted at that dir.
+///
+/// The tempdir is returned separately (not moved into the `Chunker`) so the
+/// test can write fixture files into it before invoking the syncer.
+pub struct ClientBase {
+    pub pool: cooklang_sync_client::connection::ConnectionPool,
+    pub dir: TempDir,
+    pub chunker: Chunker,
+}
+
+pub fn client_base() -> ClientBase {
+    let (pool, dir) = fresh_client_pool();
+    let cache = InMemoryCache::new(100, 10_000_000);
+    let chunker = Chunker::new(cache, dir.path().to_path_buf());
+    ClientBase { pool, dir, chunker }
+}

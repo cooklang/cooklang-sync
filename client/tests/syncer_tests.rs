@@ -14,7 +14,7 @@ use cooklang_sync_client::connection::get_connection;
 use cooklang_sync_client::models::{CreateForm, DeleteForm, FileRecord};
 use cooklang_sync_client::registry;
 use cooklang_sync_client::remote::Remote;
-use cooklang_sync_client::syncer::check_upload_once;
+use cooklang_sync_client::syncer::{check_download_once, check_upload_once};
 use std::sync::Arc;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
@@ -162,4 +162,77 @@ async fn check_upload_once_commits_tombstone_without_hashifying() {
         .await
         .expect("check_upload_once");
     assert!(ok, "tombstone commit is a Success => all_commited stays true");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_download_once_writes_file_and_inserts_registry_row() {
+    use cooklang_sync_client::chunker::Chunker;
+
+    let server = MockServer::start().await;
+
+    // We need two mocks to be wired in a particular order:
+    //   1. GET /metadata/list?jid=0 → return one record referencing chunk "c1"
+    //   2. POST /chunks/download    → stream back a multipart body containing c1
+    // The chunk id must be content-derived so the chunker accepts the save.
+    // Easiest: we hashify a known text file *first* in a scratch chunker rooted
+    // at a throwaway dir, grab the chunk id, then drive the real download against
+    // a fresh base.
+    let scratch_dir = tempfile::TempDir::new().unwrap();
+    tokio::fs::write(scratch_dir.path().join("a.cook"), b"Eggs\n").await.unwrap();
+    let scratch_cache = cooklang_sync_client::chunker::InMemoryCache::new(10, 1_000_000);
+    let mut scratch = Chunker::new(scratch_cache, scratch_dir.path().to_path_buf());
+    let ids = scratch.hashify("a.cook").await.unwrap();
+    assert_eq!(ids.len(), 1, "text file produces one line-per-chunk id");
+    let chunk_id = ids[0].clone();
+
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 11, "path": "a.cook", "deleted": false, "chunk_ids": chunk_id }
+        ])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let boundary = "downloadbound";
+    let body = format!(
+        "--{b}\r\nX-Chunk-ID: {id}\r\nContent-Type: application/octet-stream\r\n\r\nEggs\n\r\n--{b}--\r\n",
+        b = boundary,
+        id = chunk_id
+    );
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", format!("multipart/form-data; boundary={}", boundary).as_str())
+                .set_body_bytes(body.into_bytes()),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let mut base = common::client_base();
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let downloaded = check_download_once(
+        &base.pool,
+        Arc::clone(&chunker_arc),
+        &remote,
+        base.dir.path(),
+        NS,
+    )
+    .await
+    .expect("check_download_once");
+    assert!(downloaded, "non-empty remote list => returns true");
+
+    // File was written.
+    let bytes = tokio::fs::read(base.dir.path().join("a.cook")).await.expect("read");
+    assert_eq!(bytes, b"Eggs\n");
+
+    // Registry has a live row with jid=11.
+    let conn = &mut get_connection(&base.pool).expect("checkout");
+    let rows = registry::non_deleted(conn, NS).expect("non_deleted");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].path, "a.cook");
+    assert_eq!(rows[0].jid, Some(11));
 }

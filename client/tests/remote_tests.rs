@@ -4,9 +4,9 @@
 //! at its URL. Tests assert on URL shape, headers, and body — *not* on the
 //! per-instance `uuid` that `Remote` mints at construction.
 
-use cooklang_sync_client::remote::{CommitResultStatus, Remote};
+use cooklang_sync_client::remote::{CommitResultStatus, Remote, ResponseFileRecord};
 use wiremock::matchers::{
-    body_string_contains, header, header_exists, method, path, query_param_contains,
+    body_string_contains, header, header_exists, method, path, query_param, query_param_contains,
 };
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -103,4 +103,60 @@ async fn commit_maps_5xx_to_unknown_with_status_in_message() {
         SyncError::Unknown(msg) => assert!(msg.contains("503"), "expected status in message, got {msg:?}"),
         other => panic!("expected SyncError::Unknown on 5xx, got {:?}", other),
     }
+}
+
+#[tokio::test]
+async fn list_parses_response_records_and_preserves_order() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .and(query_param("jid", "7"))
+        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 8, "path": "a.cook", "deleted": false, "chunk_ids": "abc" },
+            { "id": 9, "path": "b.cook", "deleted": true,  "chunk_ids": "" }
+        ])))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let records: Vec<ResponseFileRecord> = remote.list(7).await.expect("list");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].id, 8);
+    assert_eq!(records[0].path, "a.cook");
+    assert!(!records[0].deleted);
+    assert_eq!(records[0].chunk_ids, "abc");
+    assert_eq!(records[1].id, 9);
+    assert!(records[1].deleted);
+}
+
+#[tokio::test]
+async fn list_returns_empty_vec_on_empty_json_array() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let records = remote.list(0).await.expect("list");
+    assert!(records.is_empty());
+}
+
+#[tokio::test]
+async fn list_maps_401_to_unauthorized() {
+    use cooklang_sync_client::errors::SyncError;
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.list(0).await.unwrap_err();
+    assert!(matches!(err, SyncError::Unauthorized));
 }

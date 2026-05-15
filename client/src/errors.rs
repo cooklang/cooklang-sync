@@ -50,3 +50,39 @@ impl SyncError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn io_error_from_conversion_preserves_message() {
+        let io = std::io::Error::new(std::io::ErrorKind::NotFound, "boom");
+        let err: SyncError = io.into();
+        let msg = format!("{err}");
+        assert!(msg.contains("boom"), "wrapped IO error message preserved: {msg}");
+        assert!(matches!(err, SyncError::IoErrorGeneric(_)));
+    }
+
+    #[test]
+    fn from_io_error_helper_attaches_path() {
+        let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "nope");
+        let err = SyncError::from_io_error("/some/path", io);
+        let msg = format!("{err}");
+        assert!(msg.contains("/some/path"), "path should be in message: {msg}");
+        assert!(msg.contains("nope"), "source cause should be in message: {msg}");
+        assert!(matches!(err, SyncError::IoError { .. }));
+    }
+
+    #[test]
+    fn unauthorized_has_stable_display() {
+        let err = SyncError::Unauthorized;
+        assert_eq!(format!("{err}"), "Unauthorized token");
+    }
+
+    #[test]
+    fn unknown_variant_includes_context() {
+        let err = SyncError::Unknown("xyz".into());
+        assert!(format!("{err}").contains("xyz"));
+    }
+}

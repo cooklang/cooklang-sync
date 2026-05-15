@@ -7,7 +7,7 @@ mod common;
 
 use cooklang_sync_client::connection::get_connection;
 use cooklang_sync_client::indexer::check_index_once;
-use cooklang_sync_client::models::FileRecord;
+use cooklang_sync_client::models::{CreateForm, FileRecord};
 use cooklang_sync_client::registry;
 use cooklang_sync_client::schema::file_records;
 use diesel::prelude::*;
@@ -16,6 +16,7 @@ use std::fs;
 use std::os::unix::fs::symlink;
 use std::path::PathBuf;
 use tempfile::TempDir;
+use time::OffsetDateTime;
 
 const NS: i32 = 1;
 
@@ -206,4 +207,56 @@ fn check_index_once_skips_symlinks() {
     paths.sort();
     assert_eq!(paths, vec!["real.cook".to_string()],
         "symlink entry must be skipped by filter_eligible");
+}
+
+#[test]
+fn check_index_once_does_not_tombstone_just_downloaded_file() {
+    // Regression test for https://github.com/cooklang/cooklang-sync/issues/18.
+    //
+    // The downloader inserts FileRecord rows using forward-slash paths from
+    // server responses. The indexer builds its on-disk view by walking the
+    // filesystem and converting Path values to strings. If the indexer keys
+    // paths differently from the downloader, `compare_records` treats the
+    // same file as both "missing on disk" (-> DeleteForm) and "new on disk"
+    // (-> CreateForm), which uploads a tombstone to the server. On Windows
+    // this destroys recipes on first sync.
+    let (pool, _db_dir) = common::fresh_client_pool();
+    let storage = storage_dir();
+
+    // Simulate what the downloader does: write the file to disk with a
+    // forward-slash relative path and insert a non-deleted FileRecord
+    // with the same forward-slash path (this is the server's canonical form).
+    let rel = "plats/pates-carbo.cook";
+    let content = b"-- a recipe --";
+    let full = write(&storage, rel, content);
+
+    let modified_at = {
+        let meta = fs::metadata(&full).expect("stat file");
+        let m = OffsetDateTime::from(meta.modified().expect("modified mtime"));
+        m.replace_nanosecond(0).unwrap_or(m) // match build_file_record's truncate_to_seconds
+    };
+
+    {
+        let conn = &mut get_connection(&pool).unwrap();
+        let form = CreateForm {
+            jid: Some(42), // downloaded records carry a server jid
+            path: rel.to_string(),
+            deleted: false,
+            size: content.len() as i64,
+            modified_at,
+            namespace_id: NS,
+        };
+        registry::create(conn, &vec![form]).expect("seed registry");
+    }
+
+    // Run the indexer's filesystem-vs-registry comparison.
+    check_index_once(&pool, storage.path(), NS).expect("check_index_once");
+
+    // The downloaded file must still be the only active row, and it must
+    // not have been soft-deleted by a spurious DeleteForm.
+    let conn = &mut get_connection(&pool).unwrap();
+    let live = registry::non_deleted(conn, NS).unwrap();
+    assert_eq!(live.len(), 1, "expected exactly one active row, got {:?}", live);
+    assert_eq!(live[0].path, rel);
+    assert!(!live[0].deleted, "downloaded file must not be soft-deleted by the indexer");
 }

@@ -10,7 +10,7 @@ use crate::schema::*;
 
 type Result<T, E = diesel::result::Error> = std::result::Result<T, E>;
 
-pub fn create(conn: &mut Connection, forms: &Vec<CreateForm>) -> Result<usize> {
+pub fn create(conn: &mut Connection, forms: &[CreateForm]) -> Result<usize> {
     trace!("inserting {:?}", forms);
 
     insert_into(file_records::table).values(forms).execute(conn)
@@ -25,7 +25,7 @@ pub fn update_jid(conn: &mut Connection, record: &FileRecord, jid: i32) -> Resul
         .execute(conn)
 }
 
-pub fn delete(conn: &mut Connection, forms: &Vec<DeleteForm>) -> Result<usize> {
+pub fn delete(conn: &mut Connection, forms: &[DeleteForm]) -> Result<usize> {
     trace!("marking as deleted {:?}", forms);
 
     insert_into(file_records::table).values(forms).execute(conn)

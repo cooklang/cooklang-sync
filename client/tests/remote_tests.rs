@@ -4,8 +4,10 @@
 //! at its URL. Tests assert on URL shape, headers, and body — *not* on the
 //! per-instance `uuid` that `Remote` mints at construction.
 
-use cooklang_sync_client::remote::{CommitResultStatus, Remote, ResponseFileRecord};
+use cooklang_sync_client::errors::SyncError;
+use cooklang_sync_client::remote::{CommitResultStatus, Remote, ResponseFileRecord, REQUEST_TIMEOUT_SECS};
 use futures::StreamExt;
+use std::time::Duration;
 use wiremock::matchers::{
     body_string_contains, header, header_exists, method, path, query_param, query_param_contains,
 };
@@ -69,8 +71,6 @@ async fn commit_returns_need_chunks_on_2xx_with_need_chunks_payload() {
 
 #[tokio::test]
 async fn commit_maps_401_to_unauthorized() {
-    use cooklang_sync_client::errors::SyncError;
-
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/metadata/commit"))
@@ -89,8 +89,6 @@ async fn commit_maps_401_to_unauthorized() {
 
 #[tokio::test]
 async fn commit_maps_5xx_to_unknown_with_status_in_message() {
-    use cooklang_sync_client::errors::SyncError;
-
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/metadata/commit"))
@@ -148,8 +146,6 @@ async fn list_returns_empty_vec_on_empty_json_array() {
 
 #[tokio::test]
 async fn list_maps_401_to_unauthorized() {
-    use cooklang_sync_client::errors::SyncError;
-
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/metadata/list"))
@@ -180,8 +176,6 @@ async fn poll_returns_ok_on_200() {
 
 #[tokio::test]
 async fn poll_maps_401_to_unauthorized() {
-    use cooklang_sync_client::errors::SyncError;
-
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/metadata/poll"))
@@ -194,11 +188,9 @@ async fn poll_maps_401_to_unauthorized() {
     assert!(matches!(err, SyncError::Unauthorized));
 }
 
+#[ignore = "deliberately waits for REQUEST_TIMEOUT_SECS (~60 s); run with -- --ignored"]
 #[tokio::test]
 async fn poll_treats_client_timeout_as_ok() {
-    use cooklang_sync_client::remote::REQUEST_TIMEOUT_SECS;
-    use std::time::Duration;
-
     let server = MockServer::start().await;
     // Respond *after* the client's request timeout expires.
     Mock::given(method("GET"))
@@ -228,6 +220,37 @@ async fn upload_posts_raw_body_to_chunk_path() {
 
     let remote = new_remote(&server);
     remote.upload("abc123", b"hello".to_vec()).await.expect("upload");
+}
+
+#[tokio::test]
+async fn upload_maps_401_to_unauthorized() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/abc123"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.upload("abc123", b"hello".to_vec()).await.unwrap_err();
+    assert!(matches!(err, SyncError::Unauthorized));
+}
+
+#[tokio::test]
+async fn upload_maps_5xx_to_unknown_with_status_in_message() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/abc123"))
+        .respond_with(ResponseTemplate::new(503))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.upload("abc123", b"hello".to_vec()).await.unwrap_err();
+    match err {
+        SyncError::Unknown(msg) => assert!(msg.contains("503"), "expected status in message, got {msg:?}"),
+        other => panic!("expected SyncError::Unknown on 5xx, got {:?}", other),
+    }
 }
 
 #[tokio::test]
@@ -271,6 +294,23 @@ async fn upload_batch_maps_401_to_unauthorized() {
 }
 
 #[tokio::test]
+async fn upload_batch_maps_5xx_to_unknown_with_status_in_message() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/upload"))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.upload_batch(vec![("c1".into(), b"x".to_vec())]).await.unwrap_err();
+    match err {
+        SyncError::Unknown(msg) => assert!(msg.contains("500"), "expected status in message, got {msg:?}"),
+        other => panic!("expected SyncError::Unknown on 5xx, got {:?}", other),
+    }
+}
+
+#[tokio::test]
 async fn download_returns_body_bytes_on_200() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
@@ -288,8 +328,6 @@ async fn download_returns_body_bytes_on_200() {
 
 #[tokio::test]
 async fn download_maps_401_to_unauthorized() {
-    use cooklang_sync_client::errors::SyncError;
-
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/chunks/xyz"))
@@ -356,8 +394,6 @@ async fn download_batch_streams_parts_keyed_by_x_chunk_id_header() {
 
 #[tokio::test]
 async fn download_batch_errors_when_content_type_is_missing() {
-    use cooklang_sync_client::errors::SyncError;
-
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/chunks/download"))

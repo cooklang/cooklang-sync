@@ -31,7 +31,7 @@ pub async fn run(
     pool: &ConnectionPool,
     storage_path: &Path,
     namespace_id: i32,
-    chunker: &mut Chunker,
+    chunker: Chunker,
     remote: &Remote,
     local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
     read_only: bool,
@@ -78,7 +78,7 @@ async fn download_loop(
     token: CancellationToken,
     listener: Option<Arc<dyn SyncStatusListener>>,
     pool: &ConnectionPool,
-    chunker: Arc<Mutex<&mut Chunker>>,
+    chunker: Arc<Mutex<Chunker>>,
     remote: &Remote,
     storage_path: &Path,
     namespace_id: i32,
@@ -134,7 +134,7 @@ pub async fn upload_loop(
     token: CancellationToken,
     listener: Option<Arc<dyn SyncStatusListener>>,
     pool: &ConnectionPool,
-    chunker: Arc<Mutex<&mut Chunker>>,
+    chunker: Arc<Mutex<Chunker>>,
     remote: &Remote,
     namespace_id: i32,
     mut local_registry_updated_rx: Receiver<models::IndexerUpdateEvent>,
@@ -182,7 +182,7 @@ pub async fn upload_loop(
 
 pub async fn check_upload_once(
     pool: &ConnectionPool,
-    chunker: Arc<Mutex<&mut Chunker>>,
+    chunker: Arc<Mutex<Chunker>>,
     remote: &Remote,
     namespace_id: i32,
 ) -> Result<bool> {
@@ -246,7 +246,7 @@ pub async fn check_upload_once(
 
 pub async fn check_download_once(
     pool: &ConnectionPool,
-    chunker: Arc<Mutex<&mut Chunker>>,
+    chunker: Arc<Mutex<Chunker>>,
     remote: &Remote,
     storage_path: &Path,
     namespace_id: i32,

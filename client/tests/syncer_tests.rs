@@ -10,7 +10,9 @@
 
 mod common;
 
+use cooklang_sync_client::chunker::{Chunker, InMemoryCache};
 use cooklang_sync_client::connection::get_connection;
+use cooklang_sync_client::errors::SyncError;
 use cooklang_sync_client::models::{CreateForm, DeleteForm, FileRecord};
 use cooklang_sync_client::registry;
 use cooklang_sync_client::remote::Remote;
@@ -18,7 +20,7 @@ use cooklang_sync_client::syncer::{check_download_once, check_upload_once};
 use std::sync::Arc;
 use time::OffsetDateTime;
 use tokio::sync::Mutex;
-use wiremock::matchers::{method, path};
+use wiremock::matchers::{body_string_contains, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 const NS: i32 = 1;
@@ -46,17 +48,17 @@ async fn check_upload_once_commits_success_and_marks_jid() {
         .mount(&server)
         .await;
 
-    let mut base = common::client_base();
+    let base = common::client_base();
     // Seed a real file so hashify can read it.
     tokio::fs::write(base.dir.path().join("a.cook"), b"Eggs\n").await.expect("write file");
     // Seed a registry row with jid=None so `updated_locally` picks it up.
     {
         let conn = &mut get_connection(&base.pool).expect("checkout");
-        registry::create(conn, &vec![sample_create("a.cook", 5)]).expect("create");
+        registry::create(conn, &[sample_create("a.cook", 5)]).expect("create");
     }
 
     let remote = Remote::new(&server.uri(), TOKEN);
-    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
     let all_committed = check_upload_once(&base.pool, Arc::clone(&chunker_arc), &remote, NS)
         .await
         .expect("check_upload_once");
@@ -108,11 +110,11 @@ async fn check_upload_once_triggers_upload_batch_when_server_asks_for_chunks() {
 
     {
         let conn = &mut get_connection(&base.pool).expect("checkout");
-        registry::create(conn, &vec![sample_create("a.cook", 5)]).expect("create");
+        registry::create(conn, &[sample_create("a.cook", 5)]).expect("create");
     }
 
     let remote = Remote::new(&server.uri(), TOKEN);
-    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
     let all_committed = check_upload_once(&base.pool, Arc::clone(&chunker_arc), &remote, NS)
         .await
         .expect("check_upload_once");
@@ -124,8 +126,6 @@ async fn check_upload_once_triggers_upload_batch_when_server_asks_for_chunks() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn check_upload_once_commits_tombstone_without_hashifying() {
-    use wiremock::matchers::body_string_contains;
-
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/metadata/commit"))
@@ -136,13 +136,13 @@ async fn check_upload_once_commits_tombstone_without_hashifying() {
         .mount(&server)
         .await;
 
-    let mut base = common::client_base();
+    let base = common::client_base();
     // Deliberately do NOT write the file to disk.
     {
         let conn = &mut get_connection(&base.pool).expect("checkout");
         // Seed a first record + a tombstone that supersedes it. `updated_locally`
         // returns the latest (id-max) row per path.
-        registry::create(conn, &vec![sample_create("gone.cook", 10)]).expect("create");
+        registry::create(conn, &[sample_create("gone.cook", 10)]).expect("create");
         let live: Vec<FileRecord> = registry::non_deleted(conn, NS).expect("non_deleted");
         let latest = live.first().expect("live row").clone();
         let tombstone = DeleteForm {
@@ -153,11 +153,11 @@ async fn check_upload_once_commits_tombstone_without_hashifying() {
             deleted: true,
             namespace_id: NS,
         };
-        registry::delete(conn, &vec![tombstone]).expect("delete");
+        registry::delete(conn, &[tombstone]).expect("delete");
     }
 
     let remote = Remote::new(&server.uri(), TOKEN);
-    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
     let ok = check_upload_once(&base.pool, Arc::clone(&chunker_arc), &remote, NS)
         .await
         .expect("check_upload_once");
@@ -166,8 +166,6 @@ async fn check_upload_once_commits_tombstone_without_hashifying() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn check_download_once_writes_file_and_inserts_registry_row() {
-    use cooklang_sync_client::chunker::Chunker;
-
     let server = MockServer::start().await;
 
     // We need two mocks to be wired in a particular order:
@@ -179,7 +177,7 @@ async fn check_download_once_writes_file_and_inserts_registry_row() {
     // a fresh base.
     let scratch_dir = tempfile::TempDir::new().unwrap();
     tokio::fs::write(scratch_dir.path().join("a.cook"), b"Eggs\n").await.unwrap();
-    let scratch_cache = cooklang_sync_client::chunker::InMemoryCache::new(10, 1_000_000);
+    let scratch_cache = InMemoryCache::new(10, 1_000_000);
     let mut scratch = Chunker::new(scratch_cache, scratch_dir.path().to_path_buf());
     let ids = scratch.hashify("a.cook").await.unwrap();
     assert_eq!(ids.len(), 1, "text file produces one line-per-chunk id");
@@ -211,9 +209,9 @@ async fn check_download_once_writes_file_and_inserts_registry_row() {
         .mount(&server)
         .await;
 
-    let mut base = common::client_base();
+    let base = common::client_base();
     let remote = Remote::new(&server.uri(), TOKEN);
-    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
     let downloaded = check_download_once(
         &base.pool,
         Arc::clone(&chunker_arc),
@@ -251,15 +249,15 @@ async fn check_download_once_removes_local_file_and_appends_tombstone() {
         .await;
     // No /chunks/download is expected — deleted records skip the download queue.
 
-    let mut base = common::client_base();
+    let base = common::client_base();
     tokio::fs::write(base.dir.path().join("gone.cook"), b"bye\n").await.unwrap();
     {
         let conn = &mut get_connection(&base.pool).expect("checkout");
-        registry::create(conn, &vec![sample_create("gone.cook", 4)]).expect("create");
+        registry::create(conn, &[sample_create("gone.cook", 4)]).expect("create");
     }
 
     let remote = Remote::new(&server.uri(), TOKEN);
-    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
     check_download_once(
         &base.pool,
         Arc::clone(&chunker_arc),
@@ -296,9 +294,9 @@ async fn check_download_once_empty_remote_list_is_noop() {
     // No /chunks/download should be hit; wiremock will error on unmatched paths
     // when we assert on a mounted mock. We omit that mock deliberately.
 
-    let mut base = common::client_base();
+    let base = common::client_base();
     let remote = Remote::new(&server.uri(), TOKEN);
-    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
     let downloaded = check_download_once(
         &base.pool,
         Arc::clone(&chunker_arc),
@@ -318,8 +316,6 @@ async fn check_download_once_empty_remote_list_is_noop() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn check_download_once_propagates_unauthorized_from_list() {
-    use cooklang_sync_client::errors::SyncError;
-
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/metadata/list"))
@@ -327,9 +323,9 @@ async fn check_download_once_propagates_unauthorized_from_list() {
         .mount(&server)
         .await;
 
-    let mut base = common::client_base();
+    let base = common::client_base();
     let remote = Remote::new(&server.uri(), TOKEN);
-    let chunker_arc = Arc::new(Mutex::new(&mut base.chunker));
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
     let err = check_download_once(
         &base.pool,
         Arc::clone(&chunker_arc),
@@ -339,6 +335,34 @@ async fn check_download_once_propagates_unauthorized_from_list() {
     )
     .await
     .unwrap_err();
+    assert!(
+        matches!(err, SyncError::Unauthorized),
+        "expected SyncError::Unauthorized, got {:?}",
+        err
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_upload_once_propagates_unauthorized_from_commit() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/metadata/commit"))
+        .respond_with(ResponseTemplate::new(401))
+        .mount(&server)
+        .await;
+
+    let base = common::client_base();
+    tokio::fs::write(base.dir.path().join("a.cook"), b"Eggs\n").await.expect("write file");
+    {
+        let conn = &mut get_connection(&base.pool).expect("checkout");
+        registry::create(conn, &[sample_create("a.cook", 5)]).expect("create");
+    }
+
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
+    let err = check_upload_once(&base.pool, Arc::clone(&chunker_arc), &remote, NS)
+        .await
+        .unwrap_err();
     assert!(
         matches!(err, SyncError::Unauthorized),
         "expected SyncError::Unauthorized, got {:?}",

@@ -13,7 +13,7 @@
 ## File Structure
 
 - **Modify** `client/src/indexer.rs` — replace `to_string_lossy()` with `to_slash_lossy()` at line 189; add a `path_slash` import; extend `#[cfg(test)] mod tests` with a unit test for `build_file_record`.
-- **Create** `client/tests/indexer_no_spurious_tombstone.rs` — integration test that simulates "downloader-wrote-a-file" state and runs `check_index_once`, asserting no spurious `DeleteForm` is recorded.
+- **Modify** `client/tests/indexer_tests.rs` — append an integration test that simulates "downloader-wrote-a-file" state and runs `check_index_once`, asserting no spurious `DeleteForm` is recorded. The repo already has this file with `mod common;` and a `write` helper; the new test reuses both.
 - **Create** `.github/workflows/test.yml` — multi-platform CI matrix (Ubuntu, macOS, Windows) running `cargo test --workspace --all-features` on push and pull request.
 
 Each is self-contained; tasks below cover them in order.
@@ -159,137 +159,123 @@ git commit -m "fix: normalise indexer path keys to forward slashes (#18)"
 
 ---
 
-## Task 3: Add failing integration test for spurious-tombstone scenario
+## Task 3: Add integration test for spurious-tombstone scenario
 
 **Files:**
-- Create: `client/tests/indexer_no_spurious_tombstone.rs`
+- Modify: `client/tests/indexer_tests.rs` (append a new `#[test]` function)
 
 This test simulates the post-download state that breaks on Windows: a `FileRecord` with a forward-slash path already exists in the registry (as `check_download_once` would have inserted), and the corresponding file is on disk. Running `check_index_once` must NOT mark the record deleted.
 
-- [ ] **Step 1: Create the integration test file**
+The test reuses the existing helpers already in `indexer_tests.rs` on main: `common::fresh_client_pool()`, `storage_dir()`, `write()`, and the `NS` constant.
 
-Create `client/tests/indexer_no_spurious_tombstone.rs` with the following exact content:
+- [ ] **Step 1: Add the needed imports to `client/tests/indexer_tests.rs`**
+
+Inspect the top of `client/tests/indexer_tests.rs`. It currently imports:
 
 ```rust
-// Regression test for https://github.com/cooklang/cooklang-sync/issues/18.
-//
-// The downloader inserts FileRecord rows using forward-slash paths from
-// server responses. The indexer's `check_index_once` builds its on-disk
-// view by walking the filesystem and converting Path values to strings.
-// If those two views key paths differently, `compare_records` treats them
-// as different paths and emits a DeleteForm for the just-downloaded file,
-// which is then uploaded to the server as a tombstone. On Windows this
-// destroys recipes on first sync.
-//
-// This test exercises the post-download state directly: insert a registry
-// row, write the file to disk, run check_index_once, and assert no
-// soft-delete row was added.
-
-use cooklang_sync_client::connection::{get_connection, get_connection_pool};
+use cooklang_sync_client::connection::get_connection;
 use cooklang_sync_client::indexer::check_index_once;
-use cooklang_sync_client::models::CreateForm;
+use cooklang_sync_client::models::FileRecord;
 use cooklang_sync_client::registry;
-use std::fs::{self, File};
-use std::io::Write;
-use tempfile::TempDir;
+use cooklang_sync_client::schema::file_records;
+```
+
+Add `CreateForm` to the `models` import so it becomes:
+
+```rust
+use cooklang_sync_client::models::{CreateForm, FileRecord};
+```
+
+Also add `time::OffsetDateTime` to the imports (the test needs it to set `modified_at`):
+
+```rust
 use time::OffsetDateTime;
+```
 
-const NAMESPACE_ID: i32 = 1;
+Place it alongside the other `use` lines near the top of the file.
 
-fn write_file(storage: &std::path::Path, relative_with_forward_slashes: &str, bytes: &[u8]) {
-    // The server-side path uses forward slashes; on Windows we must
-    // re-split so we create the file using OS-native separators.
-    let mut absolute = storage.to_path_buf();
-    for segment in relative_with_forward_slashes.split('/') {
-        absolute.push(segment);
-    }
-    if let Some(parent) = absolute.parent() {
-        fs::create_dir_all(parent).expect("create parent dirs");
-    }
-    let mut f = File::create(&absolute).expect("create file");
-    f.write_all(bytes).expect("write file");
-    f.flush().expect("flush file");
-}
+- [ ] **Step 2: Append the new test at the end of `client/tests/indexer_tests.rs`**
 
-fn modified_at_for(storage: &std::path::Path, relative_with_forward_slashes: &str) -> OffsetDateTime {
-    let mut absolute = storage.to_path_buf();
-    for segment in relative_with_forward_slashes.split('/') {
-        absolute.push(segment);
-    }
-    let metadata = fs::metadata(&absolute).expect("stat file");
-    let modified = metadata.modified().expect("modified mtime");
-    // Match the truncation `build_file_record` applies so the registry
-    // row's modified_at compares equal to what the indexer produces.
-    let dt = OffsetDateTime::from(modified);
-    dt.replace_nanosecond(0).unwrap_or(dt)
-}
+Add this test as the last item in the file (just before the file's final newline; do not add it inside any `cfg`-gated block — it must run on every platform):
 
+```rust
 #[test]
 fn check_index_once_does_not_tombstone_just_downloaded_file() {
-    let storage = TempDir::new().expect("storage tempdir");
-    let db_dir = TempDir::new().expect("db tempdir");
-    let db_path = db_dir.path().join("sync.db");
+    // Regression test for https://github.com/cooklang/cooklang-sync/issues/18.
+    //
+    // The downloader inserts FileRecord rows using forward-slash paths from
+    // server responses. The indexer builds its on-disk view by walking the
+    // filesystem and converting Path values to strings. If the indexer keys
+    // paths differently from the downloader, `compare_records` treats the
+    // same file as both "missing on disk" (-> DeleteForm) and "new on disk"
+    // (-> CreateForm), which uploads a tombstone to the server. On Windows
+    // this destroys recipes on first sync.
+    let (pool, _db_dir) = common::fresh_client_pool();
+    let storage = storage_dir();
 
-    let pool = get_connection_pool(db_path.to_str().expect("utf8 db path"))
-        .expect("connection pool");
-
-    // Simulate what the downloader does: write the file to disk and
-    // insert a non-deleted FileRecord with the forward-slash server path.
-    let relative_path = "plats/pates-carbo.cook";
+    // Simulate what the downloader does: write the file to disk with a
+    // forward-slash relative path and insert a non-deleted FileRecord
+    // with the same forward-slash path (this is the server's canonical form).
+    let rel = "plats/pates-carbo.cook";
     let content = b"-- a recipe --";
-    write_file(storage.path(), relative_path, content);
-    let modified_at = modified_at_for(storage.path(), relative_path);
+    let full = write(&storage, rel, content);
+
+    let modified_at = {
+        let meta = fs::metadata(&full).expect("stat file");
+        let m = OffsetDateTime::from(meta.modified().expect("modified mtime"));
+        m.replace_nanosecond(0).unwrap_or(m) // match build_file_record's truncate_to_seconds
+    };
 
     {
-        let conn = &mut get_connection(&pool).expect("conn");
+        let conn = &mut get_connection(&pool).unwrap();
         let form = CreateForm {
-            jid: Some(42), // a downloaded record has a server jid
-            path: relative_path.to_string(),
+            jid: Some(42), // downloaded records carry a server jid
+            path: rel.to_string(),
             deleted: false,
             size: content.len() as i64,
             modified_at,
-            namespace_id: NAMESPACE_ID,
+            namespace_id: NS,
         };
         registry::create(conn, &vec![form]).expect("seed registry");
     }
 
-    // Now run the indexer's filesystem-vs-registry comparison.
-    check_index_once(&pool, storage.path(), NAMESPACE_ID).expect("check_index_once");
+    // Run the indexer's filesystem-vs-registry comparison.
+    check_index_once(&pool, storage.path(), NS).expect("check_index_once");
 
-    // Assertion: the file should still be present in `non_deleted`,
-    // and no extra rows should have been inserted (the indexer detects
-    // equality and emits nothing).
-    let conn = &mut get_connection(&pool).expect("conn");
-    let active = registry::non_deleted(conn, NAMESPACE_ID).expect("non_deleted");
-
-    assert_eq!(
-        active.len(),
-        1,
-        "expected exactly one active row, got {:?}",
-        active
-    );
-    assert_eq!(active[0].path, relative_path);
-    assert!(
-        !active[0].deleted,
-        "downloaded file must not be soft-deleted by the indexer"
-    );
+    // The downloaded file must still be the only active row, and it must
+    // not have been soft-deleted by a spurious DeleteForm.
+    let conn = &mut get_connection(&pool).unwrap();
+    let live = registry::non_deleted(conn, NS).unwrap();
+    assert_eq!(live.len(), 1, "expected exactly one active row, got {:?}", live);
+    assert_eq!(live[0].path, rel);
+    assert!(!live[0].deleted, "downloaded file must not be soft-deleted by the indexer");
 }
 ```
 
-- [ ] **Step 2: Run the new integration test**
+Note: `write` (the file-writing helper) returns `PathBuf` already in this file (`indexer_tests.rs:27-34`). `fs` is already imported at the top. `storage_dir` and `NS` are already defined locally. No new helpers needed.
+
+- [ ] **Step 3: Run the new test**
 
 ```bash
-cd client && cargo test --test indexer_no_spurious_tombstone
+cd client && cargo test --test indexer_tests check_index_once_does_not_tombstone_just_downloaded_file
 ```
 
-Expected on macOS/Linux: PASS — because Task 2 already landed the fix, and on Unix-likes the bug never reproduced anyway. The test's value is twofold: (a) on Windows in CI it FAILS without the fix and PASSES with it, (b) it locks the indexer/downloader path-key contract for future changes.
+Expected on macOS/Linux: PASS — Task 2 already landed the fix, and on Unix-likes the bug never reproduced. The test's value is twofold: (a) on Windows in CI it would FAIL without the fix and PASSES with it; (b) it locks the indexer/downloader path-key contract for future changes.
 
-If this test had been written before Task 2, on Windows it would fail with a non-empty `active` listing containing a `deleted: true` row (or a length other than 1). We don't run that scenario locally because we don't assume a Windows host.
+If you suspect the test is a no-op (e.g., trivially passing because `non_deleted` filtering masks the bug), confirm by checking the row count too: the test asserts `live.len() == 1`, so an additional `deleted: true` row would still leave `live.len() == 1` but the integration test from `indexer_tests.rs` line 119 already covers the deletion path. Together they pin both directions.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Run the full `indexer_tests` integration suite to confirm no regressions**
 
 ```bash
-git add client/tests/indexer_no_spurious_tombstone.rs
+cd client && cargo test --test indexer_tests
+```
+
+Expected: all tests pass (the existing tests plus the new one).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add client/tests/indexer_tests.rs
 git commit -m "test: regression for #18 spurious tombstone after download"
 ```
 

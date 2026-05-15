@@ -5,6 +5,7 @@ use futures::{
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use path_slash::PathExt as _;
 use walkdir::WalkDir;
 
 use notify_debouncer_mini::DebounceEventResult;
@@ -186,7 +187,7 @@ fn build_file_record(path: &Path, base: &Path, namespace_id: i32) -> Result<Crea
         .metadata()
         .map_err(|e| SyncError::from_io_error(path, e))?;
     // we assume that it was already checked and only one of these can be now
-    let path = path.strip_prefix(base)?.to_string_lossy().into_owned();
+    let path = path.strip_prefix(base)?.to_slash_lossy().into_owned();
     let size: i64 = metadata.len().try_into()?;
     let time = metadata
         .modified()

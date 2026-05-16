@@ -107,8 +107,7 @@ pub fn run_download_once(
 
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new(INMEMORY_CACHE_MAX_REC, INMEMORY_CACHE_MAX_MEM);
-    let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());
-    let chunker = Arc::new(Mutex::new(chunker));
+    let chunker = Arc::new(Mutex::new(Chunker::new(chunk_cache, storage_dir.clone())));
     let remote = &remote::Remote::new(api_endpoint, remote_token);
 
     let pool = connection::get_connection_pool(db_file_path)?;
@@ -138,8 +137,7 @@ pub fn run_upload_once(
 ) -> Result<(), errors::SyncError> {
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new(INMEMORY_CACHE_MAX_REC, INMEMORY_CACHE_MAX_MEM);
-    let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());
-    let chunker = Arc::new(Mutex::new(chunker));
+    let chunker = Arc::new(Mutex::new(Chunker::new(chunk_cache, storage_dir.clone())));
     let remote = &remote::Remote::new(api_endpoint, remote_token);
 
     let pool = connection::get_connection_pool(db_file_path)?;
@@ -188,7 +186,7 @@ pub async fn run_async(
 
     let storage_dir = &PathBuf::from(storage_dir);
     let chunk_cache = InMemoryCache::new(INMEMORY_CACHE_MAX_REC, INMEMORY_CACHE_MAX_MEM);
-    let chunker = &mut Chunker::new(chunk_cache, storage_dir.clone());
+    let chunker = Chunker::new(chunk_cache, storage_dir.clone());
     let remote = &remote::Remote::new(api_endpoint, remote_token);
 
     let pool = connection::get_connection_pool(db_file_path)?;

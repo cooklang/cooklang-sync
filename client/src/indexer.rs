@@ -5,6 +5,7 @@ use futures::{
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
+use path_slash::PathExt as _;
 use walkdir::WalkDir;
 
 use notify_debouncer_mini::DebounceEventResult;
@@ -186,7 +187,7 @@ fn build_file_record(path: &Path, base: &Path, namespace_id: i32) -> Result<Crea
         .metadata()
         .map_err(|e| SyncError::from_io_error(path, e))?;
     // we assume that it was already checked and only one of these can be now
-    let path = path.strip_prefix(base)?.to_string_lossy().into_owned();
+    let path = path.strip_prefix(base)?.to_slash_lossy().into_owned();
     let size: i64 = metadata.len().try_into()?;
     let time = metadata
         .modified()
@@ -235,6 +236,8 @@ fn build_delete_form(record: &FileRecord, namespace_id: i32) -> DeleteForm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
+    use std::fs::{self, File};
 
     fn dt(nanos: u32) -> OffsetDateTime {
         OffsetDateTime::UNIX_EPOCH
@@ -265,5 +268,35 @@ mod tests {
         let stored_roundtrip = dt(123_000_000);
         assert_ne!(disk, stored_roundtrip);
         assert_eq!(truncate_to_seconds(disk), truncate_to_seconds(stored_roundtrip));
+    }
+
+    #[test]
+    fn build_file_record_normalises_path_separators_to_forward_slash() {
+        // The indexer's HashMap is keyed on the returned path string; the
+        // downloader inserts registry rows using forward-slash paths from the
+        // server. If these disagree, every downloaded file looks "missing on
+        // disk" to the indexer and triggers a spurious tombstone upload.
+        // See https://github.com/cooklang/cooklang-sync/issues/18.
+
+        let tmp = TempDir::new().expect("create tempdir");
+        let base = tmp.path();
+
+        // Construct the nested path the way WalkDir would produce it on the
+        // host: a Path built from native components. On Windows this contains
+        // backslashes; on Unix it contains forward slashes. Either way, the
+        // returned CreateForm.path must use forward slashes.
+        let nested_dir = base.join("plats");
+        fs::create_dir_all(&nested_dir).expect("create nested dir");
+        let file_path = nested_dir.join("pates-carbo.cook");
+        File::create(&file_path).expect("create file");
+
+        let record = build_file_record(&file_path, base, 1).expect("build_file_record");
+
+        assert!(
+            !record.path.contains('\\'),
+            "path must not contain backslash, got {:?}",
+            record.path
+        );
+        assert_eq!(record.path, "plats/pates-carbo.cook");
     }
 }

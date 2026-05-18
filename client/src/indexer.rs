@@ -114,11 +114,21 @@ fn filter_eligible(p: &Path) -> bool {
     chunker::is_text(p) || chunker::is_binary(p)
 }
 
+fn is_dot_dir(e: &walkdir::DirEntry) -> bool {
+    // Prune any directory whose name starts with '.', but never prune
+    // the root itself (depth == 0). The root exemption lets users
+    // configure a hidden storage path like ~/.cooklang without
+    // accidentally skipping everything inside it.
+    e.depth() > 0
+        && e.file_name().to_str().is_some_and(|s| s.starts_with('.'))
+}
+
 fn get_file_records_from_disk(base_path: &Path, namespace_id: i32) -> Result<DiskFiles, SyncError> {
     let mut cache = HashMap::new();
 
     let iter = WalkDir::new(base_path)
         .into_iter()
+        .filter_entry(|e| !(e.file_type().is_dir() && is_dot_dir(e)))
         .filter_map(|e| e.ok())
         .map(|p| p.into_path())
         .filter(|p| filter_eligible(p));

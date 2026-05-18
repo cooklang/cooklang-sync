@@ -700,4 +700,47 @@ mod tests {
             "storage root must never be removed"
         );
     }
+
+    #[tokio::test]
+    async fn delete_stops_at_first_non_empty_ancestor() {
+        // If `a/` still has a sibling file after we delete `a/b/c.cook`,
+        // we must remove `a/b/` (now empty) but leave `a/` alone.
+        // remove_dir naturally enforces this via ENOTEMPTY; this test
+        // pins that behavior so a future refactor can't accidentally
+        // implement recursive deletion.
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(100, 10_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        let nested_dir = temp.path().join("a").join("b");
+        tokio::fs::create_dir_all(&nested_dir).await.unwrap();
+        tokio::fs::write(nested_dir.join("c.cook"), b"eggs\n")
+            .await
+            .unwrap();
+        tokio::fs::write(temp.path().join("a").join("sibling.cook"), b"flour\n")
+            .await
+            .unwrap();
+
+        chunker
+            .delete("a/b/c.cook")
+            .await
+            .expect("delete should succeed");
+
+        assert!(
+            !temp.path().join("a/b/c.cook").exists(),
+            "target file should be removed"
+        );
+        assert!(
+            !temp.path().join("a/b").exists(),
+            "empty intermediate directory should be removed"
+        );
+        assert!(
+            temp.path().join("a").exists(),
+            "non-empty ancestor must be preserved"
+        );
+        assert!(
+            temp.path().join("a/sibling.cook").exists(),
+            "sibling file must be preserved"
+        );
+    }
 }

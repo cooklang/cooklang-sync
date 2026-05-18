@@ -743,4 +743,37 @@ mod tests {
             "sibling file must be preserved"
         );
     }
+
+    #[tokio::test]
+    async fn delete_does_not_remove_storage_root() {
+        // Even when the very last file in the storage root is deleted,
+        // the root itself must survive — otherwise the next download
+        // cycle has nowhere to write to, and the indexer would crash
+        // walking a missing directory.
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(100, 10_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        tokio::fs::write(temp.path().join("only.cook"), b"sugar\n")
+            .await
+            .unwrap();
+
+        chunker
+            .delete("only.cook")
+            .await
+            .expect("delete should succeed");
+
+        assert!(
+            !temp.path().join("only.cook").exists(),
+            "file should be removed"
+        );
+        assert!(
+            temp.path().exists(),
+            "storage root must never be removed"
+        );
+        assert!(
+            temp.path().is_dir(),
+            "storage root must still be a directory"
+        );
+    }
 }

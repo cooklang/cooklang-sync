@@ -776,4 +776,38 @@ mod tests {
             "storage root must still be a directory"
         );
     }
+
+    #[tokio::test]
+    async fn delete_leaves_sibling_files_in_same_directory() {
+        // Deleting `a/x.cook` when `a/y.cook` also exists must leave
+        // both `a/` and `a/y.cook` intact. This is the "obvious" case
+        // but worth pinning — a naive implementation that always
+        // removes the immediate parent would break it.
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(100, 10_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        let dir = temp.path().join("a");
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        tokio::fs::write(dir.join("x.cook"), b"salt\n").await.unwrap();
+        tokio::fs::write(dir.join("y.cook"), b"pepper\n").await.unwrap();
+
+        chunker
+            .delete("a/x.cook")
+            .await
+            .expect("delete should succeed");
+
+        assert!(
+            !temp.path().join("a/x.cook").exists(),
+            "target file should be removed"
+        );
+        assert!(
+            temp.path().join("a").exists(),
+            "directory with remaining files must be preserved"
+        );
+        assert!(
+            temp.path().join("a/y.cook").exists(),
+            "sibling file must be preserved"
+        );
+    }
 }

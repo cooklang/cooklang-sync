@@ -114,11 +114,21 @@ fn filter_eligible(p: &Path) -> bool {
     chunker::is_text(p) || chunker::is_binary(p)
 }
 
+fn is_dot_dir(e: &walkdir::DirEntry) -> bool {
+    // Prune any directory whose name starts with '.', but never prune
+    // the root itself (depth == 0). The root exemption lets users
+    // configure a hidden storage path like ~/.cooklang without
+    // accidentally skipping everything inside it.
+    e.depth() > 0
+        && e.file_name().to_str().is_some_and(|s| s.starts_with('.'))
+}
+
 fn get_file_records_from_disk(base_path: &Path, namespace_id: i32) -> Result<DiskFiles, SyncError> {
     let mut cache = HashMap::new();
 
     let iter = WalkDir::new(base_path)
         .into_iter()
+        .filter_entry(|e| !(e.file_type().is_dir() && is_dot_dir(e)))
         .filter_map(|e| e.ok())
         .map(|p| p.into_path())
         .filter(|p| filter_eligible(p));
@@ -298,5 +308,85 @@ mod tests {
             record.path
         );
         assert_eq!(record.path, "plats/pates-carbo.cook");
+    }
+
+    #[test]
+    fn get_file_records_from_disk_skips_files_inside_dot_directory() {
+        // Issue #20: files inside a top-level dot-directory must not be
+        // indexed. The dot-dir convention covers VCS metadata (.git),
+        // editor state (.vscode), OS caches (.Trash) etc — none of which
+        // belong in a recipe sync.
+        let tmp = TempDir::new().expect("create tempdir");
+        let base = tmp.path();
+
+        // A normal recipe — should be indexed.
+        fs::create_dir_all(base.join("recipes")).expect("mkdir recipes");
+        File::create(base.join("recipes/dinner.cook")).expect("create cook");
+
+        // A hidden VCS metadata directory containing a file that would
+        // otherwise pass `filter_eligible` (note the `.yaml` extension —
+        // without it, the test would pass trivially because filter_eligible
+        // already rejects extension-less files like `.git/HEAD`).
+        fs::create_dir_all(base.join(".git")).expect("mkdir .git");
+        File::create(base.join(".git/config.yaml")).expect("create config");
+
+        let records = get_file_records_from_disk(base, 1).expect("walk");
+
+        assert_eq!(records.len(), 1, "expected exactly one record; got {:?}", records.keys().collect::<Vec<_>>());
+        assert!(records.contains_key("recipes/dinner.cook"), "normal recipe must be indexed; got {:?}", records.keys().collect::<Vec<_>>());
+        assert!(!records.contains_key(".git/config.yaml"), "dot-dir file must be excluded; got {:?}", records.keys().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn get_file_records_from_disk_skips_nested_dot_directory() {
+        // The pruning must apply at any depth, not just under the root.
+        // A `.cache/` inside an otherwise normal subfolder should still
+        // be skipped.
+        let tmp = TempDir::new().expect("create tempdir");
+        let base = tmp.path();
+
+        fs::create_dir_all(base.join("recipes/.cache")).expect("mkdir nested");
+        File::create(base.join("recipes/.cache/x.cook")).expect("create nested file");
+
+        let records = get_file_records_from_disk(base, 1).expect("walk");
+        assert!(
+            records.is_empty(),
+            "nested dot-dir contents must be skipped; got {:?}",
+            records.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn get_file_records_from_disk_keeps_dotfile_in_root() {
+        // Files (not directories) with a leading dot must still flow
+        // through. The chunker's is_text whitelist already allows
+        // `.shopping-list`, `.shopping-checked`, `.bookmarks` — we must
+        // not break that contract.
+        let tmp = TempDir::new().expect("create tempdir");
+        let base = tmp.path();
+
+        File::create(base.join(".shopping-list")).expect("create dotfile");
+
+        let records = get_file_records_from_disk(base, 1).expect("walk");
+
+        assert_eq!(records.len(), 1, "expected exactly one record; got {:?}", records.keys().collect::<Vec<_>>());
+        assert!(records.contains_key(".shopping-list"), "whitelisted root dotfile must be indexed; got {:?}", records.keys().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn get_file_records_from_disk_keeps_files_when_storage_root_is_hidden() {
+        // If the user configures their storage_dir to be a hidden path
+        // (e.g. ~/.cooklang), we must not prune the root itself —
+        // otherwise nothing would ever sync. The depth() > 0 guard in
+        // is_dot_dir enforces this; this test pins it.
+        let tmp = TempDir::new().expect("create tempdir");
+        let hidden_root = tmp.path().join(".cooklang");
+        fs::create_dir_all(&hidden_root).expect("mkdir hidden root");
+        File::create(hidden_root.join("r.cook")).expect("create cook in hidden root");
+
+        let records = get_file_records_from_disk(&hidden_root, 1).expect("walk");
+
+        assert_eq!(records.len(), 1, "expected exactly one record; got {:?}", records.keys().collect::<Vec<_>>());
+        assert!(records.contains_key("r.cook"), "file inside hidden storage root must be indexed; got {:?}", records.keys().collect::<Vec<_>>());
     }
 }

@@ -148,10 +148,26 @@ impl Chunker {
         trace!("deleting {:?}", path);
         let full_path = self.full_path(path);
 
-        // TODO delete folders up too if empty
-        fs::remove_file(full_path)
+        fs::remove_file(&full_path)
             .await
             .map_err(|e| SyncError::from_io_error(path, e))?;
+
+        // Walk parents upward and remove empty directories. `remove_dir`
+        // only succeeds on empty directories, which gives us strict-empty
+        // semantics without manually counting entries. Stop at the storage
+        // root (never remove it) and on any error (most commonly ENOTEMPTY
+        // when a sibling file is present — that's the normal terminating
+        // condition, not a failure to propagate).
+        let mut parent = full_path.parent();
+        while let Some(dir) = parent {
+            if dir == self.base_path {
+                break;
+            }
+            if fs::remove_dir(dir).await.is_err() {
+                break;
+            }
+            parent = dir.parent();
+        }
 
         Ok(())
     }
@@ -644,6 +660,44 @@ mod tests {
             hashes.len(),
             3,
             "three newline-terminated lines should yield three text chunks; got {hashes:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_removes_empty_parent_directories() {
+        // Issue #21: when the syncer deletes the only file inside a
+        // nested directory, those now-empty parents must also be removed.
+        // Otherwise users see ghost folders accumulate on receiving devices.
+        let temp = tempfile::TempDir::new().unwrap();
+        let cache = InMemoryCache::new(100, 10_000);
+        let mut chunker = Chunker::new(cache, temp.path().to_path_buf());
+
+        let nested_dir = temp.path().join("a").join("b");
+        tokio::fs::create_dir_all(&nested_dir).await.unwrap();
+        tokio::fs::write(nested_dir.join("c.cook"), b"eggs\n")
+            .await
+            .unwrap();
+
+        chunker
+            .delete("a/b/c.cook")
+            .await
+            .expect("delete should succeed");
+
+        assert!(
+            !temp.path().join("a/b/c.cook").exists(),
+            "file should be removed"
+        );
+        assert!(
+            !temp.path().join("a/b").exists(),
+            "empty intermediate directory should be removed"
+        );
+        assert!(
+            !temp.path().join("a").exists(),
+            "empty grandparent directory should be removed"
+        );
+        assert!(
+            temp.path().exists(),
+            "storage root must never be removed"
         );
     }
 }

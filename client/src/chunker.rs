@@ -158,12 +158,21 @@ impl Chunker {
         // root (never remove it) and on any error (most commonly ENOTEMPTY
         // when a sibling file is present — that's the normal terminating
         // condition, not a failure to propagate).
+        //
+        // SAFETY: `dir == self.base_path` is a lexical comparison. It is
+        // sound here because `full_path` is built by `base_path.clone()`
+        // + `push(path)` with no canonicalization on either side, and the
+        // server-provided `path` is trusted to not contain `..` segments
+        // (the indexer produces forward-slash relative paths via WalkDir,
+        // which never emits parent components). If that contract ever
+        // weakens, harden this guard with `starts_with` or a depth check.
         let mut parent = full_path.parent();
         while let Some(dir) = parent {
             if dir == self.base_path {
                 break;
             }
-            if fs::remove_dir(dir).await.is_err() {
+            if let Err(e) = fs::remove_dir(dir).await {
+                trace!("stopping empty-dir cleanup at {:?}: {}", dir, e);
                 break;
             }
             parent = dir.parent();

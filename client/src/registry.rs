@@ -1,4 +1,4 @@
-use diesel::dsl::{max, sql};
+use diesel::dsl::sql;
 use diesel::prelude::*;
 use diesel::{insert_into, update};
 
@@ -38,7 +38,7 @@ pub fn non_deleted(conn: &mut Connection, namespace_id: i32) -> Result<Vec<FileR
     let subquery = file_records::table
         .filter(file_records::namespace_id.eq(namespace_id))
         .group_by(file_records::path)
-        .select(max(file_records::id))
+        .select(diesel::dsl::max(file_records::id))
         .into_boxed()
         .select(sql::<diesel::sql_types::Integer>("max(id)"));
 
@@ -60,7 +60,7 @@ pub fn updated_locally(conn: &mut Connection, namespace_id: i32) -> Result<Vec<F
     let subquery = file_records::table
         .filter(file_records::namespace_id.eq(namespace_id))
         .group_by(file_records::path)
-        .select(max(file_records::id))
+        .select(diesel::dsl::max(file_records::id))
         .into_boxed()
         .select(sql::<diesel::sql_types::Integer>("max(id)"));
 

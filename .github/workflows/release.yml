@@ -18,6 +18,9 @@ env:
   PACKAGE_NAME: cooklang-sync-client
   LIB_NAME: cooklang_sync_client
   FRAMEWORK_NAME: CooklangSyncFFI
+  # Pin the minimum iOS version baked into the compiled objects; without this,
+  # rustc/clang default to the runner's SDK version.
+  IPHONEOS_DEPLOYMENT_TARGET: "16.0"
 
 jobs:
   # Build iOS artifacts on macOS
@@ -42,8 +45,8 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-ios-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-ios-cargo-
+          key: ${{ runner.os }}-ios-cargo-min16-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-ios-cargo-min16-
 
       - name: Build iOS targets
         run: |

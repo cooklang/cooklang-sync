@@ -11,6 +11,10 @@
 
 set -euo pipefail
 
+# Pin the minimum iOS version baked into the compiled objects; without this,
+# rustc/clang default to the build machine's SDK version.
+export IPHONEOS_DEPLOYMENT_TARGET=16.0
+
 PACKAGE=$1
 LIB=$2
 FRAMEWORK=$3
@@ -135,7 +139,7 @@ infoplist() {
     # The following values are required. Without them, the App Store will return an "Asset validation failed" error.
     /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 1.0" "$plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 1" "$plist"
-    /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 16.0" "$plist"
+    /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string $IPHONEOS_DEPLOYMENT_TARGET" "$plist"
   fi
 }
 

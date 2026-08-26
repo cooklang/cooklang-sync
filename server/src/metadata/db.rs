@@ -1,4 +1,4 @@
-use diesel::dsl::{max, sql};
+use diesel::dsl::sql;
 use diesel::prelude::*;
 use rocket_sync_db_pools::database;
 
@@ -51,7 +51,7 @@ pub fn has_files(conn: &mut DbConnection, user_id: i32) -> Result<bool> {
     let subquery = file_records::table
         .filter(file_records::user_id.eq(user_id))
         .group_by(file_records::path)
-        .select(max(file_records::id))
+        .select(diesel::dsl::max(file_records::id))
         .into_boxed()
         .select(sql::<diesel::sql_types::Integer>("max(id)"));
 
@@ -68,7 +68,7 @@ pub fn list(conn: &mut DbConnection, user_id: i32, jid: i32) -> Result<Vec<FileR
     let subquery = file_records::table
         .filter(file_records::user_id.eq(user_id))
         .group_by(file_records::path)
-        .select(max(file_records::id))
+        .select(diesel::dsl::max(file_records::id))
         .into_boxed()
         .select(sql::<diesel::sql_types::Integer>("max(id)"));
 

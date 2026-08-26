@@ -30,6 +30,8 @@ pub enum SyncError {
     ConnectionInitError(String),
     #[error("Unauthorized token")]
     Unauthorized,
+    #[error("Sync requires a paid plan")]
+    PaymentRequired,
     #[error("Can't parse the response")]
     BodyExtractError,
     #[error("Can't find in cache")]
@@ -60,7 +62,10 @@ mod tests {
         let io = std::io::Error::new(std::io::ErrorKind::NotFound, "boom");
         let err: SyncError = io.into();
         let msg = format!("{err}");
-        assert!(msg.contains("boom"), "wrapped IO error message preserved: {msg}");
+        assert!(
+            msg.contains("boom"),
+            "wrapped IO error message preserved: {msg}"
+        );
         assert!(matches!(err, SyncError::IoErrorGeneric(_)));
     }
 
@@ -69,8 +74,14 @@ mod tests {
         let io = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "nope");
         let err = SyncError::from_io_error("/some/path", io);
         let msg = format!("{err}");
-        assert!(msg.contains("/some/path"), "path should be in message: {msg}");
-        assert!(msg.contains("nope"), "source cause should be in message: {msg}");
+        assert!(
+            msg.contains("/some/path"),
+            "path should be in message: {msg}"
+        );
+        assert!(
+            msg.contains("nope"),
+            "source cause should be in message: {msg}"
+        );
         assert!(matches!(err, SyncError::IoError { .. }));
     }
 
@@ -78,6 +89,12 @@ mod tests {
     fn unauthorized_has_stable_display() {
         let err = SyncError::Unauthorized;
         assert_eq!(format!("{err}"), "Unauthorized token");
+    }
+
+    #[test]
+    fn payment_required_has_stable_display() {
+        let err = SyncError::PaymentRequired;
+        assert_eq!(format!("{err}"), "Sync requires a paid plan");
     }
 
     #[test]

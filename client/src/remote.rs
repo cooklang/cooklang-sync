@@ -91,6 +91,7 @@ impl Remote {
         match response.status() {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            StatusCode::PAYMENT_REQUIRED => Err(SyncError::PaymentRequired),
             status => Err(SyncError::Unknown(format!(
                 "Upload chunk failed with status: {}",
                 status
@@ -151,6 +152,7 @@ impl Remote {
         match response.status() {
             StatusCode::OK => Ok(()),
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            StatusCode::PAYMENT_REQUIRED => Err(SyncError::PaymentRequired),
             status => Err(SyncError::Unknown(format!(
                 "Upload batch failed with status: {}",
                 status
@@ -174,6 +176,7 @@ impl Remote {
                 Err(_) => Err(SyncError::BodyExtractError),
             },
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            StatusCode::PAYMENT_REQUIRED => Err(SyncError::PaymentRequired),
             status => Err(SyncError::Unknown(format!(
                 "Download chunk failed with status: {}",
                 status
@@ -200,6 +203,7 @@ impl Remote {
                 Ok(records)
             }
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            StatusCode::PAYMENT_REQUIRED => Err(SyncError::PaymentRequired),
             status => Err(SyncError::Unknown(format!(
                 "List metadata failed with status: {}",
                 status
@@ -233,6 +237,7 @@ impl Remote {
             Ok(response) => match response.status() {
                 StatusCode::OK => Ok(()),
                 StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+                StatusCode::PAYMENT_REQUIRED => Err(SyncError::PaymentRequired),
                 status => Err(SyncError::Unknown(format!(
                     "Poll metadata failed with status: {}",
                     status
@@ -274,6 +279,7 @@ impl Remote {
                 Ok(records)
             }
             StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized),
+            StatusCode::PAYMENT_REQUIRED => Err(SyncError::PaymentRequired),
             status => Err(SyncError::Unknown(format!(
                 "Commit metadata failed with status: {}",
                 status
@@ -336,6 +342,7 @@ impl Remote {
                     }
                 }
                 StatusCode::UNAUTHORIZED => Err(SyncError::Unauthorized)?,
+                StatusCode::PAYMENT_REQUIRED => Err(SyncError::PaymentRequired)?,
                 status => Err(SyncError::Unknown(format!("Download batch failed with status: {}", status)))?,
             }
         })

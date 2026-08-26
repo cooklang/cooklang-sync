@@ -5,7 +5,9 @@
 //! per-instance `uuid` that `Remote` mints at construction.
 
 use cooklang_sync_client::errors::SyncError;
-use cooklang_sync_client::remote::{CommitResultStatus, Remote, ResponseFileRecord, REQUEST_TIMEOUT_SECS};
+use cooklang_sync_client::remote::{
+    CommitResultStatus, Remote, ResponseFileRecord, REQUEST_TIMEOUT_SECS,
+};
 use futures::StreamExt;
 use std::time::Duration;
 use wiremock::matchers::{
@@ -26,7 +28,10 @@ async fn commit_returns_success_on_2xx_with_success_payload() {
 
     Mock::given(method("POST"))
         .and(path("/metadata/commit"))
-        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .and(header(
+            "authorization",
+            format!("Bearer {}", TOKEN).as_str(),
+        ))
         .and(header_exists("user-agent"))
         .and(header_exists("x-client-version"))
         .and(query_param_contains("uuid", "-")) // v4 UUID always contains hyphens
@@ -62,7 +67,10 @@ async fn commit_returns_need_chunks_on_2xx_with_need_chunks_payload() {
         .await;
 
     let remote = new_remote(&server);
-    let result = remote.commit("a.cook", false, "abc,def").await.expect("commit");
+    let result = remote
+        .commit("a.cook", false, "abc,def")
+        .await
+        .expect("commit");
     match result {
         CommitResultStatus::NeedChunks(s) => assert_eq!(s, "abc,def"),
         other => panic!("expected NeedChunks, got {:?}", other),
@@ -88,6 +96,24 @@ async fn commit_maps_401_to_unauthorized() {
 }
 
 #[tokio::test]
+async fn commit_maps_402_to_payment_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/metadata/commit"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.commit("a.cook", false, "").await.unwrap_err();
+    assert!(
+        matches!(err, SyncError::PaymentRequired),
+        "expected SyncError::PaymentRequired on 402, got {:?}",
+        err
+    );
+}
+
+#[tokio::test]
 async fn commit_maps_5xx_to_unknown_with_status_in_message() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
@@ -99,7 +125,10 @@ async fn commit_maps_5xx_to_unknown_with_status_in_message() {
     let remote = new_remote(&server);
     let err = remote.commit("a.cook", false, "").await.unwrap_err();
     match err {
-        SyncError::Unknown(msg) => assert!(msg.contains("503"), "expected status in message, got {msg:?}"),
+        SyncError::Unknown(msg) => assert!(
+            msg.contains("503"),
+            "expected status in message, got {msg:?}"
+        ),
         other => panic!("expected SyncError::Unknown on 5xx, got {:?}", other),
     }
 }
@@ -110,7 +139,10 @@ async fn list_parses_response_records_and_preserves_order() {
     Mock::given(method("GET"))
         .and(path("/metadata/list"))
         .and(query_param("jid", "7"))
-        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .and(header(
+            "authorization",
+            format!("Bearer {}", TOKEN).as_str(),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
             { "id": 8, "path": "a.cook", "deleted": false, "chunk_ids": "abc" },
             { "id": 9, "path": "b.cook", "deleted": true,  "chunk_ids": "" }
@@ -159,12 +191,29 @@ async fn list_maps_401_to_unauthorized() {
 }
 
 #[tokio::test]
+async fn list_maps_402_to_payment_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.list(0).await.unwrap_err();
+    assert!(matches!(err, SyncError::PaymentRequired));
+}
+
+#[tokio::test]
 async fn poll_returns_ok_on_200() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/metadata/poll"))
         .and(query_param_contains("uuid", "-"))
-        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .and(header(
+            "authorization",
+            format!("Bearer {}", TOKEN).as_str(),
+        ))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(&server)
@@ -188,6 +237,20 @@ async fn poll_maps_401_to_unauthorized() {
     assert!(matches!(err, SyncError::Unauthorized));
 }
 
+#[tokio::test]
+async fn poll_maps_402_to_payment_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/poll"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.poll().await.unwrap_err();
+    assert!(matches!(err, SyncError::PaymentRequired));
+}
+
 #[ignore = "deliberately waits for REQUEST_TIMEOUT_SECS (~60 s); run with -- --ignored"]
 #[tokio::test]
 async fn poll_treats_client_timeout_as_ok() {
@@ -196,15 +259,17 @@ async fn poll_treats_client_timeout_as_ok() {
     Mock::given(method("GET"))
         .and(path("/metadata/poll"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_delay(Duration::from_secs(REQUEST_TIMEOUT_SECS + 5)),
+            ResponseTemplate::new(200).set_delay(Duration::from_secs(REQUEST_TIMEOUT_SECS + 5)),
         )
         .mount(&server)
         .await;
 
     let remote = new_remote(&server);
     // `poll` deliberately swallows reqwest::Error::is_timeout and returns Ok(()).
-    remote.poll().await.expect("timeout should be mapped to Ok(())");
+    remote
+        .poll()
+        .await
+        .expect("timeout should be mapped to Ok(())");
 }
 
 #[tokio::test]
@@ -212,14 +277,20 @@ async fn upload_posts_raw_body_to_chunk_path() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/chunks/abc123"))
-        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .and(header(
+            "authorization",
+            format!("Bearer {}", TOKEN).as_str(),
+        ))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(&server)
         .await;
 
     let remote = new_remote(&server);
-    remote.upload("abc123", b"hello".to_vec()).await.expect("upload");
+    remote
+        .upload("abc123", b"hello".to_vec())
+        .await
+        .expect("upload");
 }
 
 #[tokio::test]
@@ -232,8 +303,28 @@ async fn upload_maps_401_to_unauthorized() {
         .await;
 
     let remote = new_remote(&server);
-    let err = remote.upload("abc123", b"hello".to_vec()).await.unwrap_err();
+    let err = remote
+        .upload("abc123", b"hello".to_vec())
+        .await
+        .unwrap_err();
     assert!(matches!(err, SyncError::Unauthorized));
+}
+
+#[tokio::test]
+async fn upload_maps_402_to_payment_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/abc123"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote
+        .upload("abc123", b"hello".to_vec())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::PaymentRequired));
 }
 
 #[tokio::test]
@@ -246,9 +337,15 @@ async fn upload_maps_5xx_to_unknown_with_status_in_message() {
         .await;
 
     let remote = new_remote(&server);
-    let err = remote.upload("abc123", b"hello".to_vec()).await.unwrap_err();
+    let err = remote
+        .upload("abc123", b"hello".to_vec())
+        .await
+        .unwrap_err();
     match err {
-        SyncError::Unknown(msg) => assert!(msg.contains("503"), "expected status in message, got {msg:?}"),
+        SyncError::Unknown(msg) => assert!(
+            msg.contains("503"),
+            "expected status in message, got {msg:?}"
+        ),
         other => panic!("expected SyncError::Unknown on 5xx, got {:?}", other),
     }
 }
@@ -258,12 +355,19 @@ async fn upload_batch_posts_multipart_with_each_chunk_as_named_part() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/chunks/upload"))
-        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .and(header(
+            "authorization",
+            format!("Bearer {}", TOKEN).as_str(),
+        ))
         // Content-Type includes the generated boundary.
         .and(header_exists("content-type"))
         // Each chunk is a form-data part whose `name=` is its chunk_id.
-        .and(body_string_contains(r#"Content-Disposition: form-data; name="c1""#))
-        .and(body_string_contains(r#"Content-Disposition: form-data; name="c2""#))
+        .and(body_string_contains(
+            r#"Content-Disposition: form-data; name="c1""#,
+        ))
+        .and(body_string_contains(
+            r#"Content-Disposition: form-data; name="c2""#,
+        ))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(&server)
@@ -289,8 +393,28 @@ async fn upload_batch_maps_401_to_unauthorized() {
         .await;
 
     let remote = new_remote(&server);
-    let err = remote.upload_batch(vec![("c1".into(), b"x".to_vec())]).await.unwrap_err();
+    let err = remote
+        .upload_batch(vec![("c1".into(), b"x".to_vec())])
+        .await
+        .unwrap_err();
     assert!(matches!(err, SyncError::Unauthorized));
+}
+
+#[tokio::test]
+async fn upload_batch_maps_402_to_payment_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/upload"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote
+        .upload_batch(vec![("c1".into(), b"x".to_vec())])
+        .await
+        .unwrap_err();
+    assert!(matches!(err, SyncError::PaymentRequired));
 }
 
 #[tokio::test]
@@ -303,9 +427,15 @@ async fn upload_batch_maps_5xx_to_unknown_with_status_in_message() {
         .await;
 
     let remote = new_remote(&server);
-    let err = remote.upload_batch(vec![("c1".into(), b"x".to_vec())]).await.unwrap_err();
+    let err = remote
+        .upload_batch(vec![("c1".into(), b"x".to_vec())])
+        .await
+        .unwrap_err();
     match err {
-        SyncError::Unknown(msg) => assert!(msg.contains("500"), "expected status in message, got {msg:?}"),
+        SyncError::Unknown(msg) => assert!(
+            msg.contains("500"),
+            "expected status in message, got {msg:?}"
+        ),
         other => panic!("expected SyncError::Unknown on 5xx, got {:?}", other),
     }
 }
@@ -315,7 +445,10 @@ async fn download_returns_body_bytes_on_200() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/chunks/xyz"))
-        .and(header("authorization", format!("Bearer {}", TOKEN).as_str()))
+        .and(header(
+            "authorization",
+            format!("Bearer {}", TOKEN).as_str(),
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_bytes(b"payload".to_vec()))
         .expect(1)
         .mount(&server)
@@ -338,6 +471,20 @@ async fn download_maps_401_to_unauthorized() {
     let remote = new_remote(&server);
     let err = remote.download("xyz").await.unwrap_err();
     assert!(matches!(err, SyncError::Unauthorized));
+}
+
+#[tokio::test]
+async fn download_maps_402_to_payment_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/chunks/xyz"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let err = remote.download("xyz").await.unwrap_err();
+    assert!(matches!(err, SyncError::PaymentRequired));
 }
 
 #[tokio::test]
@@ -368,7 +515,10 @@ async fn download_batch_streams_parts_keyed_by_x_chunk_id_header() {
         .and(body_string_contains("chunk_ids%5B%5D=c2"))
         .respond_with(
             ResponseTemplate::new(200)
-                .insert_header("content-type", format!("multipart/form-data; boundary={}", boundary).as_str())
+                .insert_header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary).as_str(),
+                )
                 .set_body_bytes(body.into_bytes()),
         )
         .expect(1)
@@ -407,6 +557,25 @@ async fn download_batch_errors_when_content_type_is_missing() {
     assert!(
         matches!(first, SyncError::BatchDownloadError(_)),
         "expected BatchDownloadError on missing content-type, got {:?}",
+        first
+    );
+}
+
+#[tokio::test]
+async fn download_batch_maps_402_to_payment_required() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(ResponseTemplate::new(402))
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let mut stream = remote.download_batch(vec!["c1"]).await;
+    let first = stream.next().await.expect("at least one item").unwrap_err();
+    assert!(
+        matches!(first, SyncError::PaymentRequired),
+        "expected SyncError::PaymentRequired on 402, got {:?}",
         first
     );
 }

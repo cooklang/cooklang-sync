@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use crate::auth::user::User;
+use crate::auth::EntitledUser;
 
 mod db;
 mod middleware;
@@ -29,7 +30,7 @@ type Result<T, E = Debug<diesel::result::Error>> = std::result::Result<T, E>;
 // if present all insert into db path and chunk hashes and return back a new jid
 #[post("/commit?<uuid>", data = "<commit_payload>")]
 async fn commit(
-    user: User,
+    user: EntitledUser,
     clients: &State<Mutex<ActiveClients>>,
     db: Db,
     uuid: String,
@@ -93,7 +94,7 @@ async fn has_files(db: Db, user: User) -> Result<Json<bool>> {
 
 // return back array of jid, path, hashes for all jid since requested
 #[get("/list?<jid>")]
-async fn list(db: Db, user: User, jid: i32) -> Result<Json<Vec<FileRecord>>> {
+async fn list(db: Db, user: EntitledUser, jid: i32) -> Result<Json<Vec<FileRecord>>> {
     let records = db.run(move |conn| db_list(conn, user.id, jid)).await?;
 
     Ok(Json(records))
@@ -101,7 +102,7 @@ async fn list(db: Db, user: User, jid: i32) -> Result<Json<Vec<FileRecord>>> {
 
 #[get("/poll?<seconds>&<uuid>")]
 async fn poll(
-    _user: User,
+    _user: EntitledUser,
     clients: &State<Mutex<ActiveClients>>,
     uuid: String,
     seconds: u64,

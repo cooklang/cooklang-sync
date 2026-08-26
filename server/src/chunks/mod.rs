@@ -11,7 +11,7 @@ use rocket::futures::Stream;
 use rocket::http::{ContentType, Header};
 use rocket::tokio::fs::File;
 
-use crate::auth::user::User;
+use crate::auth::EntitledUser;
 use crate::chunk_id::ChunkId;
 
 mod request;
@@ -23,7 +23,7 @@ const EMPTY_CHUNK_ID: ChunkId = ChunkId(std::borrow::Cow::Borrowed(""));
 
 #[post("/", format = "multipart/form-data", data = "<upload>")]
 async fn upload_chunks_deprecated(
-    _user: User,
+    _user: EntitledUser,
     content_type: RawContentType<'_>,
     limits: &Limits,
     upload: Data<'_>,
@@ -68,7 +68,7 @@ async fn upload_chunks_deprecated(
 
 #[post("/upload", format = "multipart/form-data", data = "<upload>")]
 async fn upload_chunks(
-    _user: User,
+    _user: EntitledUser,
     content_type: RawContentType<'_>,
     limits: &Limits,
     upload: Data<'_>,
@@ -116,7 +116,7 @@ async fn upload_chunks(
 // TODO batch download
 // TODO does it need to check that user can access chunk?
 #[get("/<id>")]
-async fn retrieve(_user: User, id: ChunkId<'_>) -> Option<RawText<File>> {
+async fn retrieve(_user: EntitledUser, id: ChunkId<'_>) -> Option<RawText<File>> {
     if id == EMPTY_CHUNK_ID {
         None
     } else {
@@ -137,6 +137,7 @@ struct ChunkIds<'a>(Vec<ChunkId<'a>>);
     data = "<chunk_ids>"
 )]
 async fn download_chunks(
+    _user: EntitledUser,
     chunk_ids: Form<ChunkIds<'_>>,
 ) -> MultipartStream<impl Stream<Item = MultipartSection<'_>>> {
     let cloned_chunk_ids: Vec<_> = chunk_ids
@@ -164,7 +165,12 @@ async fn download_chunks(
 
 pub fn stage() -> AdHoc {
     AdHoc::on_ignite("Chunk Server Stage", |rocket| async {
-        rocket.mount(
+        info!(
+            "sync_entitlement_enforcement_mode={}",
+            crate::auth::current_mode_name()
+        );
+
+        rocket.register("/", crate::catchers::catchers()).mount(
             "/chunks",
             routes![
                 upload_chunks,

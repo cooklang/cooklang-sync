@@ -8,6 +8,7 @@ extern crate rocket;
 extern crate diesel;
 
 mod auth;
+pub mod catchers;
 mod chunk_id;
 pub mod chunks;
 pub mod metadata;

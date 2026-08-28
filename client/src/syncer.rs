@@ -106,6 +106,10 @@ async fn download_loop(
         {
             Ok(v) => v,
             Err(SyncError::Unauthorized) => return Err(SyncError::Unauthorized),
+            // 402 must survive to the caller typed — every client keys its
+            // "sync needs a plan" state off this variant, and the download
+            // check is usually the first call to hit the server.
+            Err(SyncError::PaymentRequired) => return Err(SyncError::PaymentRequired),
             Err(e) => return Err(SyncError::Unknown(format!("Check download failed: {}", e))),
         };
 

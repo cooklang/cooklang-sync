@@ -900,13 +900,13 @@ public enum SyncError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     
     case ReqwestError(message: String)
     
-    case ReqwestWirhMiddlewareError(message: String)
-    
     case ChannelSendError(message: String)
     
     case ConnectionInitError(message: String)
     
     case Unauthorized(message: String)
+    
+    case PaymentRequired(message: String)
     
     case BodyExtractError(message: String)
     
@@ -977,19 +977,19 @@ public struct FfiConverterTypeSyncError: FfiConverterRustBuffer {
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 9: return .ReqwestWirhMiddlewareError(
+        case 9: return .ChannelSendError(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 10: return .ChannelSendError(
+        case 10: return .ConnectionInitError(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 11: return .ConnectionInitError(
+        case 11: return .Unauthorized(
             message: try FfiConverterString.read(from: &buf)
         )
         
-        case 12: return .Unauthorized(
+        case 12: return .PaymentRequired(
             message: try FfiConverterString.read(from: &buf)
         )
         
@@ -1040,13 +1040,13 @@ public struct FfiConverterTypeSyncError: FfiConverterRustBuffer {
             writeInt(&buf, Int32(7))
         case .ReqwestError(_ /* message is ignored*/):
             writeInt(&buf, Int32(8))
-        case .ReqwestWirhMiddlewareError(_ /* message is ignored*/):
-            writeInt(&buf, Int32(9))
         case .ChannelSendError(_ /* message is ignored*/):
-            writeInt(&buf, Int32(10))
+            writeInt(&buf, Int32(9))
         case .ConnectionInitError(_ /* message is ignored*/):
-            writeInt(&buf, Int32(11))
+            writeInt(&buf, Int32(10))
         case .Unauthorized(_ /* message is ignored*/):
+            writeInt(&buf, Int32(11))
+        case .PaymentRequired(_ /* message is ignored*/):
             writeInt(&buf, Int32(12))
         case .BodyExtractError(_ /* message is ignored*/):
             writeInt(&buf, Int32(13))

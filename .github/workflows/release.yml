@@ -152,6 +152,15 @@ jobs:
           name: ios-artifacts
           path: cooklang-sync-ios.zip
 
+      # The SPM package compiles swift/Sources/CooklangSync from the repo, not
+      # from the release zip. prepare-release commits these back so the checked-in
+      # bindings can never drift from the xcframework they are generated against.
+      - name: Upload Swift bindings
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-swift-bindings
+          path: target/ios/swift/*.swift
+
     outputs:
       checksum: ${{ steps.checksum.outputs.CHECKSUM }}
 
@@ -385,6 +394,24 @@ jobs:
           )
           EOF
 
+      - name: Clear checked-in Swift bindings
+        run: rm -f swift/Sources/CooklangSync/*.swift
+
+      - name: Sync generated Swift bindings into the package sources
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-swift-bindings
+          path: swift/Sources/CooklangSync
+
+      - name: Verify bindings landed
+        run: |
+          SWIFT_COUNT=$(find swift/Sources/CooklangSync -name "*.swift" | wc -l)
+          if [ "$SWIFT_COUNT" -eq 0 ]; then
+            echo "ERROR: No Swift bindings in swift/Sources/CooklangSync!"
+            exit 1
+          fi
+          git status --short swift/Sources/CooklangSync
+
       - name: Commit Package.swift and create tag
         run: |
           VERSION="v${{ inputs.version }}"
@@ -392,8 +419,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add Package.swift
-          git commit -m "Update Package.swift for ${VERSION}" || echo "No changes to commit"
+          git add Package.swift swift/Sources/CooklangSync
+          git commit -m "Update Package.swift and Swift bindings for ${VERSION}" || echo "No changes to commit"
           git push origin main
 
           # Create tag at current commit (which includes updated Package.swift)

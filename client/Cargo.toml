@@ -46,7 +46,7 @@ path-slash = "0.2.1"
 ffi = ["uniffi"]
 
 [dev-dependencies]
-mockall = "0.13"
+mockall = "0.15"
 tokio-test = "0.4"
 proptest = "1.9"
 wiremock = "0.6"

@@ -100,7 +100,11 @@ impl Chunker {
         hasher.update(data);
 
         let result = hasher.finalize();
-        let hex_string = format!("{:x}", result);
+        let hex_string = result.iter().fold(String::with_capacity(64), |mut acc, b| {
+            use std::fmt::Write;
+            let _ = write!(acc, "{b:02x}");
+            acc
+        });
 
         hex_string[0..size].to_string()
     }
@@ -285,6 +289,16 @@ pub fn is_text(p: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_hash_known_sha256_value() {
+        // SHA-256("abc"), FIPS 180-2 test vector; guards against output format changes.
+        let chunker = Chunker::new(InMemoryCache::new(10, 1000), PathBuf::from("/tmp"));
+        assert_eq!(
+            chunker.hash(&b"abc".to_vec(), 64),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
     use super::*;
     use std::path::Path;
     use tempfile::TempDir;

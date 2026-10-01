@@ -23,7 +23,7 @@ async-notify = "0.3"
 tokio = { version = "1.48", features = ["time"] }
 multer = "3"
 tokio-util = "0.7"
-jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto"] }
 serde = { version = "1", features = ["derive"] }
 rocket-multipart = "0.2"
 

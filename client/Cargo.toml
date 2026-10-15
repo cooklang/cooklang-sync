@@ -26,7 +26,7 @@ futures = "0.3"
 log = "0.4"
 notify = "8.2"
 notify-debouncer-mini = "0.7"
-quick_cache = "0.6.18"
+quick_cache = "0.7.0"
 reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "stream", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

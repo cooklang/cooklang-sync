@@ -13,14 +13,19 @@ pub(crate) struct CommitPayload<'r> {
 }
 
 impl<'a> CommitPayload<'a> {
-    pub(crate) fn non_local_chunks(&self) -> Vec<ChunkId<'_>> {
-        let desired: Vec<&str> = self.chunk_ids.split(',').collect();
+    /// Returns chunks referenced by this commit that are not stored yet, or
+    /// `None` if any of the chunk ids is invalid.
+    pub(crate) fn non_local_chunks(&self) -> Option<Vec<ChunkId<'_>>> {
+        let mut missing = Vec::new();
 
-        desired
-            .into_iter()
-            .map(|c| ChunkId(std::borrow::Cow::Borrowed(c)))
-            .filter(|c| !c.is_present())
-            .collect()
+        for c in self.chunk_ids.split(',') {
+            let id = ChunkId::parse(c)?;
+            if !id.is_present() {
+                missing.push(id);
+            }
+        }
+
+        Some(missing)
     }
 }
 

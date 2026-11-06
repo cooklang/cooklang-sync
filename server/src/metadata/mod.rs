@@ -25,6 +25,19 @@ use notification::ActiveClients;
 
 type Result<T, E = Debug<diesel::result::Error>> = std::result::Result<T, E>;
 
+#[derive(Responder)]
+enum CommitError {
+    #[response(status = 400)]
+    BadRequest(&'static str),
+    Db(Debug<diesel::result::Error>),
+}
+
+impl From<diesel::result::Error> for CommitError {
+    fn from(e: diesel::result::Error) -> Self {
+        CommitError::Db(Debug(e))
+    }
+}
+
 // check if all hashes are present
 // if any not present return back need more and list of hashes
 // if present all insert into db path and chunk hashes and return back a new jid
@@ -35,8 +48,10 @@ async fn commit(
     db: Db,
     uuid: String,
     commit_payload: Form<request::CommitPayload<'_>>,
-) -> Result<Json<response::CommitResultStatus>> {
-    let to_be_uploaded = commit_payload.non_local_chunks();
+) -> Result<Json<response::CommitResultStatus>, CommitError> {
+    let to_be_uploaded = commit_payload
+        .non_local_chunks()
+        .ok_or(CommitError::BadRequest("invalid chunk id"))?;
 
     match to_be_uploaded.is_empty() {
         true => {
@@ -75,7 +90,7 @@ async fn commit(
         false => {
             let to_be_uploaded_strings: Vec<String> = to_be_uploaded
                 .iter()
-                .map(|chunk_id| chunk_id.0.to_string())
+                .map(|chunk_id| chunk_id.id().to_string())
                 .collect();
 
             Ok(Json(response::CommitResultStatus::NeedChunks(

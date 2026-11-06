@@ -8,7 +8,7 @@ use rocket::tokio::io::AsyncWriteExt;
 use rocket::async_stream::stream;
 
 use rocket::futures::Stream;
-use rocket::http::{ContentType, Header};
+use rocket::http::{ContentType, Header, Status};
 use rocket::tokio::fs::File;
 
 use crate::auth::EntitledUser;
@@ -19,7 +19,10 @@ mod response;
 
 use crate::chunks::request::RawContentType;
 
-const EMPTY_CHUNK_ID: ChunkId = ChunkId(std::borrow::Cow::Borrowed(""));
+fn io_error(e: std::io::Error) -> Status {
+    error!("chunk storage error: {:?}", e);
+    Status::InternalServerError
+}
 
 #[post("/", format = "multipart/form-data", data = "<upload>")]
 async fn upload_chunks_deprecated(
@@ -27,26 +30,33 @@ async fn upload_chunks_deprecated(
     content_type: RawContentType<'_>,
     limits: &Limits,
     upload: Data<'_>,
-) -> std::io::Result<()> {
+) -> Result<(), Status> {
     let boundary = multer::parse_boundary(content_type.0).unwrap();
     let upload_stream = upload.open(limits.get("data-form").unwrap());
     let mut multipart = Multipart::new(tokio_util::io::ReaderStream::new(upload_stream), boundary);
 
     while let Ok(Some(mut field)) = multipart.next_field().await {
-        let field_name = field.name().unwrap();
-        let chunk_id = ChunkId::from(field_name);
+        // The field name is client-controlled and is used to build a path on
+        // disk, so it must be validated before use.
+        let chunk_id = match field.name().and_then(ChunkId::parse) {
+            Some(id) => id,
+            None => {
+                warn!("rejecting chunk upload with invalid chunk id");
+                return Err(Status::BadRequest);
+            }
+        };
 
-        if chunk_id == EMPTY_CHUNK_ID {
+        if chunk_id.is_empty() {
             continue;
         }
 
         let full_path = chunk_id.file_path();
 
         if let Some(parent) = full_path.parent() {
-            create_dir_all(parent).await?;
+            create_dir_all(parent).await.map_err(io_error)?;
         }
 
-        let mut file = File::create(full_path.clone()).await?;
+        let mut file = File::create(full_path.clone()).await.map_err(io_error)?;
 
         while let Some(chunk) = match field.chunk().await {
             Ok(v) => v,
@@ -72,26 +82,33 @@ async fn upload_chunks(
     content_type: RawContentType<'_>,
     limits: &Limits,
     upload: Data<'_>,
-) -> std::io::Result<()> {
+) -> Result<(), Status> {
     let boundary = multer::parse_boundary(content_type.0).unwrap();
     let upload_stream = upload.open(limits.get("data-form").unwrap());
     let mut multipart = Multipart::new(tokio_util::io::ReaderStream::new(upload_stream), boundary);
 
     while let Ok(Some(mut field)) = multipart.next_field().await {
-        let field_name = field.name().unwrap();
-        let chunk_id = ChunkId::from(field_name);
+        // The field name is client-controlled and is used to build a path on
+        // disk, so it must be validated before use.
+        let chunk_id = match field.name().and_then(ChunkId::parse) {
+            Some(id) => id,
+            None => {
+                warn!("rejecting chunk upload with invalid chunk id");
+                return Err(Status::BadRequest);
+            }
+        };
 
-        if chunk_id == EMPTY_CHUNK_ID {
+        if chunk_id.is_empty() {
             continue;
         }
 
         let full_path = chunk_id.file_path();
 
         if let Some(parent) = full_path.parent() {
-            create_dir_all(parent).await?;
+            create_dir_all(parent).await.map_err(io_error)?;
         }
 
-        let mut file = File::create(full_path.clone()).await?;
+        let mut file = File::create(full_path.clone()).await.map_err(io_error)?;
 
         while let Some(chunk) = match field.chunk().await {
             Ok(v) => v,
@@ -117,7 +134,7 @@ async fn upload_chunks(
 // TODO does it need to check that user can access chunk?
 #[get("/<id>")]
 async fn retrieve(_user: EntitledUser, id: ChunkId<'_>) -> Option<RawText<File>> {
-    if id == EMPTY_CHUNK_ID {
+    if id.is_empty() {
         None
     } else {
         File::open(id.file_path()).await.map(RawText).ok()

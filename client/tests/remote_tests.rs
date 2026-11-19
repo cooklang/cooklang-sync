@@ -579,3 +579,37 @@ async fn download_batch_maps_402_to_payment_required() {
         first
     );
 }
+
+#[ignore = "deliberately waits past REQUEST_TIMEOUT_SECS (~65 s); run with -- --ignored"]
+#[tokio::test]
+async fn download_batch_outlives_the_general_request_timeout() {
+    use futures::StreamExt;
+
+    let server = MockServer::start().await;
+    let boundary = "downloadbound";
+    let body = format!(
+        "--{b}\r\nX-Chunk-ID: c1\r\nContent-Type: application/octet-stream\r\n\r\nEggs\n\r\n--{b}--\r\n",
+        b = boundary
+    );
+    // A download that takes longer than any other request is allowed to.
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", format!("multipart/form-data; boundary={boundary}").as_str())
+                .set_body_bytes(body.into_bytes())
+                .set_delay(Duration::from_secs(REQUEST_TIMEOUT_SECS + 5)),
+        )
+        .mount(&server)
+        .await;
+
+    let remote = new_remote(&server);
+    let mut stream = remote.download_batch(vec!["c1"]).await;
+    let (chunk_id, data) = stream
+        .next()
+        .await
+        .expect("one chunk")
+        .expect("a slow download is not a failed one");
+    assert_eq!(chunk_id, "c1");
+    assert_eq!(data, b"Eggs\n");
+}

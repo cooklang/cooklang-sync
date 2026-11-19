@@ -10,6 +10,21 @@ use crate::errors::SyncError;
 const BINARY_CHUNK_SIZE: usize = 1_024 * 1_024; // 1 MB
 const BINARY_HASH_SIZE: usize = 32;
 const TEXT_HASH_SIZE: usize = 10;
+/// What a line of a text file is assumed to weigh when sizing a download.
+const TEXT_CHUNK_SIZE_ESTIMATE: usize = 256;
+
+/// Upper estimate of the content behind a chunk id, without having the
+/// content: a binary chunk is at most `BINARY_CHUNK_SIZE`, a text chunk is
+/// one line. The two are told apart by the length of the id.
+pub fn estimated_chunk_size(chunk_id: &str) -> usize {
+    if chunk_id.is_empty() {
+        0
+    } else if chunk_id.len() > TEXT_HASH_SIZE {
+        BINARY_CHUNK_SIZE
+    } else {
+        TEXT_CHUNK_SIZE_ESTIMATE
+    }
+}
 
 pub struct Chunker {
     cache: InMemoryCache,

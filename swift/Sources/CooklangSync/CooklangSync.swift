@@ -39,6 +39,52 @@ fileprivate extension ForeignBytes {
     init(bufferPointer: UnsafeBufferPointer<UInt8>) {
         self.init(len: Int32(bufferPointer.count), data: bufferPointer.baseAddress)
     }
+
+    init(rawBufferPointer: UnsafeRawBufferPointer) {
+        self.init(
+            len: Int32(rawBufferPointer.count),
+            data: rawBufferPointer.baseAddress?.assumingMemoryBound(to: UInt8.self)
+        )
+    }
+}
+
+// Converter for `&[u8]` / `[ByRef] bytes` arguments.
+//
+// Conforms to `FfiConverter` so the compiler enforces the full converter
+// method set. Only the scope-bound `lower(_:_body:)` overload is sound —
+// zero-copy byte buffers only flow foreign -> Rust, and only in argument
+// position. The four protocol-witness methods (`lift`, `lower`, `read`,
+// `write`) `fatalError` at runtime if anyone reaches them.
+//
+// The scope-bound `lower` takes a closure because the `ForeignBytes`
+// pointer is only guaranteed valid for the duration of
+// `Data.withUnsafeBytes`. Callers must run the full FFI call inside
+// the closure body.
+fileprivate enum FfiConverterByRefBytes: FfiConverter {
+    typealias SwiftType = Data
+    typealias FfiType = ForeignBytes
+
+    static func lower<R>(_ value: Data, _ body: (ForeignBytes) throws -> R) rethrows -> R {
+        return try value.withUnsafeBytes { rawBuf in
+            try body(ForeignBytes(rawBufferPointer: rawBuf))
+        }
+    }
+
+    static func lower(_ value: Data) -> ForeignBytes {
+        fatalError("ByRef bytes cannot use the plain lower: returning ForeignBytes escapes the Data.withUnsafeBytes scope. Use the scope-bound lower(_:_body:) overload instead.")
+    }
+
+    static func lift(_ value: ForeignBytes) throws -> Data {
+        fatalError("ByRef bytes cannot be lifted: zero-copy &[u8] only flows foreign->Rust")
+    }
+
+    static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Data {
+        fatalError("ByRef bytes cannot be read from a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
+
+    static func write(_ value: Data, into buf: inout [UInt8]) {
+        fatalError("ByRef bytes cannot be written to a buffer: zero-copy &[u8] is only supported in argument position, not nested in records/options/etc.")
+    }
 }
 
 // For every type used in the interface, we provide helper methods for conveniently
@@ -477,7 +523,11 @@ fileprivate struct FfiConverterString: FfiConverter {
             return String()
         }
         let bytes = UnsafeBufferPointer<UInt8>(start: value.data!, count: Int(value.len))
-        return String(bytes: bytes, encoding: String.Encoding.utf8)!
+        // Use Swift's native UTF-8 decoder; `String(bytes:encoding:.utf8)` goes
+        // through Foundation's NSString and silently strips a leading U+FEFF BOM.
+        // Invalid UTF-8 substitutes U+FFFD instead of trapping (unreachable
+        // given Rust's `String` invariant).
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     public static func lower(_ value: String) -> RustBuffer {
@@ -493,7 +543,8 @@ fileprivate struct FfiConverterString: FfiConverter {
 
     public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> String {
         let len: Int32 = try readInt(&buf)
-        return String(bytes: try readBytes(&buf, count: Int(len)), encoding: String.Encoding.utf8)!
+        // See `lift` above for why we avoid Foundation's NSString-backed decoder here.
+        return String(decoding: try readBytes(&buf, count: Int(len)), as: UTF8.self)
     }
 
     public static func write(_ value: String, into buf: inout [UInt8]) {
@@ -570,13 +621,19 @@ open class SyncContext: SyncContextProtocol, @unchecked Sendable {
 public convenience init() {
     let handle =
         try! rustCall() {
-    uniffi_cooklang_sync_client_fn_constructor_synccontext_new($0
+        uniffiCallStatus in
+    uniffi_cooklang_sync_client_fn_constructor_synccontext_new(uniffiCallStatus
     )
 }
     self.init(unsafeFromHandle: handle)
 }
 
     deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
         try! rustCall { uniffi_cooklang_sync_client_fn_free_synccontext(handle, $0) }
     }
 
@@ -587,8 +644,9 @@ public convenience init() {
      * Cancels the sync operation
      */
 open func cancel()  {try! rustCall() {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_method_synccontext_cancel(
-            self.uniffiCloneHandle(),$0
+            self.uniffiCloneHandle(),uniffiCallStatus
     )
 }
 }
@@ -597,9 +655,10 @@ open func cancel()  {try! rustCall() {
      * Sets the status listener for this context
      */
 open func setListener(listener: SyncStatusListener)  {try! rustCall() {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_method_synccontext_set_listener(
             self.uniffiCloneHandle(),
-        FfiConverterTypeSyncStatusListener_lower(listener),$0
+        FfiConverterTypeSyncStatusListener_lower(listener),uniffiCallStatus
     )
 }
 }
@@ -713,6 +772,11 @@ open class SyncStatusListenerImpl: SyncStatusListener, @unchecked Sendable {
     // No primary constructor declared for this class.
 
     deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
         try! rustCall { uniffi_cooklang_sync_client_fn_free_syncstatuslistener(handle, $0) }
     }
 
@@ -720,18 +784,20 @@ open class SyncStatusListenerImpl: SyncStatusListener, @unchecked Sendable {
 
     
 open func onStatusChanged(status: SyncStatus)  {try! rustCall() {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_method_syncstatuslistener_on_status_changed(
             self.uniffiCloneHandle(),
-        FfiConverterTypeSyncStatus_lower(status),$0
+        FfiConverterTypeSyncStatus_lower(status),uniffiCallStatus
     )
 }
 }
     
 open func onComplete(success: Bool, message: String?)  {try! rustCall() {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_method_syncstatuslistener_on_complete(
             self.uniffiCloneHandle(),
         FfiConverterBool.lower(success),
-        FfiConverterOptionString.lower(message),$0
+        FfiConverterOptionString.lower(message),uniffiCallStatus
     )
 }
 }
@@ -748,9 +814,8 @@ fileprivate struct UniffiCallbackInterfaceSyncStatusListener {
     // Create the VTable using a series of closures.
     // Swift automatically converts these into C callback functions.
     //
-    // This creates 1-element array, since this seems to be the only way to construct a const
-    // pointer that we can pass to the Rust code.
-    static let vtable: [UniffiVTableCallbackInterfaceSyncStatusListener] = [UniffiVTableCallbackInterfaceSyncStatusListener(
+    // Store the vtable directly.
+    static let vtable: UniffiVTableCallbackInterfaceSyncStatusListener = UniffiVTableCallbackInterfaceSyncStatusListener(
         uniffiFree: { (uniffiHandle: UInt64) -> () in
             do {
                 try FfiConverterTypeSyncStatusListener.handleMap.remove(handle: uniffiHandle)
@@ -815,11 +880,23 @@ fileprivate struct UniffiCallbackInterfaceSyncStatusListener {
                 writeReturn: writeReturn
             )
         }
-    )]
+    )
+
+    // Rust stores this pointer for future callback invocations, so it must live
+    // for the process lifetime (not just for the init function call).
+    //
+    // `nonisolated(unsafe)` is needed under Swift 6 strict concurrency.
+    // This is safe because the pointee is initialized once during static init
+    // and never mutated by either side of the FFI.  Its fields are C function pointers.
+    nonisolated(unsafe) static let vtablePtr: UnsafePointer<UniffiVTableCallbackInterfaceSyncStatusListener> = {
+        let ptr = UnsafeMutablePointer<UniffiVTableCallbackInterfaceSyncStatusListener>.allocate(capacity: 1)
+        ptr.initialize(to: vtable)
+        return UnsafePointer(ptr)
+    }()
 }
 
 private func uniffiCallbackInitSyncStatusListener() {
-    uniffi_cooklang_sync_client_fn_init_callback_vtable_syncstatuslistener(UniffiCallbackInterfaceSyncStatusListener.vtable)
+    uniffi_cooklang_sync_client_fn_init_callback_vtable_syncstatuslistener(UniffiCallbackInterfaceSyncStatusListener.vtablePtr)
 }
 
 #if swift(>=5.8)
@@ -880,7 +957,8 @@ public func FfiConverterTypeSyncStatusListener_lower(_ value: SyncStatusListener
 
 
 
-public enum SyncError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
+public 
+enum SyncError: Swift.Error, Equatable, Hashable, Foundation.LocalizedError {
 
     
     
@@ -917,6 +995,8 @@ public enum SyncError: Swift.Error, Equatable, Hashable, Foundation.LocalizedErr
     case Unknown(message: String)
     
     case BatchDownloadError(message: String)
+    
+
     
 
     
@@ -1079,8 +1159,7 @@ public func FfiConverterTypeSyncError_lower(_ value: SyncError) -> RustBuffer {
     return FfiConverterTypeSyncError.lower(value)
 }
 
-// Note that we don't yet support `indirect` for enums.
-// See https://github.com/mozilla/uniffi-rs/issues/396 for further discussion.
+
 /**
  * Sync status enum for communicating sync state to external callers
  */
@@ -1112,6 +1191,8 @@ public enum SyncStatus: Equatable, Hashable {
      */
     case error(message: String
     )
+
+
 
 
 
@@ -1224,6 +1305,7 @@ fileprivate struct FfiConverterOptionString: FfiConverterRustBuffer {
  * Intended to used by external (written in other languages) callers.
  */
 public func run(context: SyncContext, storageDir: String, dbFilePath: String, apiEndpoint: String, remoteToken: String, namespaceId: Int32, downloadOnly: Bool)throws   {try rustCallWithError(FfiConverterTypeSyncError_lift) {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_func_run(
         FfiConverterTypeSyncContext_lower(context),
         FfiConverterString.lower(storageDir),
@@ -1231,7 +1313,7 @@ public func run(context: SyncContext, storageDir: String, dbFilePath: String, ap
         FfiConverterString.lower(apiEndpoint),
         FfiConverterString.lower(remoteToken),
         FfiConverterInt32.lower(namespaceId),
-        FfiConverterBool.lower(downloadOnly),$0
+        FfiConverterBool.lower(downloadOnly),uniffiCallStatus
     )
 }
 }
@@ -1241,12 +1323,13 @@ public func run(context: SyncContext, storageDir: String, dbFilePath: String, ap
  * chunker, remote client, etc every time it runs.
  */
 public func runDownloadOnce(storageDir: String, dbFilePath: String, apiEndpoint: String, remoteToken: String, namespaceId: Int32)throws   {try rustCallWithError(FfiConverterTypeSyncError_lift) {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_func_run_download_once(
         FfiConverterString.lower(storageDir),
         FfiConverterString.lower(dbFilePath),
         FfiConverterString.lower(apiEndpoint),
         FfiConverterString.lower(remoteToken),
-        FfiConverterInt32.lower(namespaceId),$0
+        FfiConverterInt32.lower(namespaceId),uniffiCallStatus
     )
 }
 }
@@ -1256,12 +1339,13 @@ public func runDownloadOnce(storageDir: String, dbFilePath: String, apiEndpoint:
  * chunker, remote client, etc every time it runs.
  */
 public func runUploadOnce(storageDir: String, dbFilePath: String, apiEndpoint: String, remoteToken: String, namespaceId: Int32)throws   {try rustCallWithError(FfiConverterTypeSyncError_lift) {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_func_run_upload_once(
         FfiConverterString.lower(storageDir),
         FfiConverterString.lower(dbFilePath),
         FfiConverterString.lower(apiEndpoint),
         FfiConverterString.lower(remoteToken),
-        FfiConverterInt32.lower(namespaceId),$0
+        FfiConverterInt32.lower(namespaceId),uniffiCallStatus
     )
 }
 }
@@ -1272,9 +1356,10 @@ public func runUploadOnce(storageDir: String, dbFilePath: String, apiEndpoint: S
  * after this function completes.
  */
 public func waitRemoteUpdate(apiEndpoint: String, remoteToken: String)throws   {try rustCallWithError(FfiConverterTypeSyncError_lift) {
+        uniffiCallStatus in
     uniffi_cooklang_sync_client_fn_func_wait_remote_update(
         FfiConverterString.lower(apiEndpoint),
-        FfiConverterString.lower(remoteToken),$0
+        FfiConverterString.lower(remoteToken),uniffiCallStatus
     )
 }
 }
@@ -1294,31 +1379,31 @@ private let initializationResult: InitializationResult = {
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_func_run() != 17439) {
+    if (uniffi_cooklang_sync_client_checksum_func_run() != 46061) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_func_run_download_once() != 16007) {
+    if (uniffi_cooklang_sync_client_checksum_func_run_download_once() != 43120) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_func_run_upload_once() != 50094) {
+    if (uniffi_cooklang_sync_client_checksum_func_run_upload_once() != 56183) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_func_wait_remote_update() != 36540) {
+    if (uniffi_cooklang_sync_client_checksum_func_wait_remote_update() != 41562) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_method_synccontext_cancel() != 60207) {
+    if (uniffi_cooklang_sync_client_checksum_method_synccontext_cancel() != 42963) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_method_synccontext_set_listener() != 33349) {
+    if (uniffi_cooklang_sync_client_checksum_method_synccontext_set_listener() != 49484) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_method_syncstatuslistener_on_status_changed() != 44707) {
+    if (uniffi_cooklang_sync_client_checksum_method_syncstatuslistener_on_status_changed() != 46175) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_method_syncstatuslistener_on_complete() != 35649) {
+    if (uniffi_cooklang_sync_client_checksum_method_syncstatuslistener_on_complete() != 58858) {
         return InitializationResult.apiChecksumMismatch
     }
-    if (uniffi_cooklang_sync_client_checksum_constructor_synccontext_new() != 8304) {
+    if (uniffi_cooklang_sync_client_checksum_constructor_synccontext_new() != 41700) {
         return InitializationResult.apiChecksumMismatch
     }
 

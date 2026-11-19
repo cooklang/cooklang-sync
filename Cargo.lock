@@ -480,6 +480,7 @@ dependencies = [
  "futures",
  "libsqlite3-sys",
  "log",
+ "memchr",
  "mockall",
  "notify",
  "notify-debouncer-mini",

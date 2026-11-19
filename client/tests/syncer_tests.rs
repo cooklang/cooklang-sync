@@ -369,3 +369,405 @@ async fn check_upload_once_propagates_unauthorized_from_commit() {
         err
     );
 }
+
+// ---------------------------------------------------------------------------
+// Batched downloads
+// ---------------------------------------------------------------------------
+
+use cooklang_sync_client::syncer::DOWNLOAD_BATCH_MAX_CHUNKS;
+use std::collections::HashMap;
+use wiremock::{Request, Respond};
+
+/// Stands in for `POST /chunks/download`: answers with exactly the chunks the
+/// request asked for, or with a 500 when the request names `fail_on`.
+struct ChunkStore {
+    chunks: HashMap<String, Vec<u8>>,
+    fail_on: Option<String>,
+}
+
+fn requested_chunk_ids(request: &Request) -> Vec<String> {
+    String::from_utf8_lossy(&request.body)
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(_, id)| id.to_string())
+        .collect()
+}
+
+impl Respond for ChunkStore {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let ids = requested_chunk_ids(request);
+
+        if let Some(fail_on) = &self.fail_on {
+            if ids.contains(fail_on) {
+                return ResponseTemplate::new(500);
+            }
+        }
+
+        let boundary = "downloadbound";
+        let mut body: Vec<u8> = Vec::new();
+        for id in ids {
+            let content = self.chunks.get(&id).expect("test asked for an unknown chunk");
+            body.extend_from_slice(
+                format!("--{boundary}\r\nX-Chunk-ID: {id}\r\nContent-Type: application/octet-stream\r\n\r\n")
+                    .as_bytes(),
+            );
+            body.extend_from_slice(content);
+            body.extend_from_slice(b"\r\n");
+        }
+        body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+
+        ResponseTemplate::new(200)
+            .insert_header("content-type", format!("multipart/form-data; boundary={boundary}").as_str())
+            .set_body_bytes(body)
+    }
+}
+
+/// Chunk ids of a text file with this content, plus the bytes behind each id.
+async fn text_chunks(content: &str) -> (Vec<String>, HashMap<String, Vec<u8>>) {
+    let scratch_dir = tempfile::TempDir::new().unwrap();
+    tokio::fs::write(scratch_dir.path().join("f.cook"), content).await.unwrap();
+    let mut scratch = Chunker::new(InMemoryCache::new(100_000, 100_000_000), scratch_dir.path().to_path_buf());
+    let ids = scratch.hashify("f.cook").await.unwrap();
+    let chunks = ids
+        .iter()
+        .map(|id| (id.clone(), scratch.read_chunk(id).unwrap()))
+        .collect();
+    (ids, chunks)
+}
+
+/// A text file of `lines` lines, no two alike, so every line is its own chunk.
+fn unique_lines(prefix: &str, lines: usize) -> String {
+    (0..lines).map(|i| format!("{prefix} line {i}\n")).collect()
+}
+
+async fn download_requests(server: &MockServer) -> Vec<Request> {
+    server
+        .received_requests()
+        .await
+        .expect("request recording is on")
+        .into_iter()
+        .filter(|r| r.url.path() == "/chunks/download")
+        .collect()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_download_once_splits_a_large_listing_into_several_requests() {
+    let server = MockServer::start().await;
+
+    // Two files that together exceed what one request may ask for.
+    let lines = DOWNLOAD_BATCH_MAX_CHUNKS * 3 / 4;
+    let content_a = unique_lines("a", lines);
+    let content_b = unique_lines("b", lines);
+    let (ids_a, mut chunks) = text_chunks(&content_a).await;
+    let (ids_b, chunks_b) = text_chunks(&content_b).await;
+    chunks.extend(chunks_b);
+
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 11, "path": "a.cook", "deleted": false, "chunk_ids": ids_a.join(",") },
+            { "id": 12, "path": "b.cook", "deleted": false, "chunk_ids": ids_b.join(",") }
+        ])))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(ChunkStore { chunks, fail_on: None })
+        .mount(&server)
+        .await;
+
+    let base = common::client_base();
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
+    check_download_once(&base.pool, Arc::clone(&chunker_arc), &remote, base.dir.path(), NS)
+        .await
+        .expect("check_download_once");
+
+    let requests = download_requests(&server).await;
+    assert_eq!(requests.len(), 2, "one request per file-sized batch");
+    for request in &requests {
+        assert!(
+            requested_chunk_ids(request).len() <= DOWNLOAD_BATCH_MAX_CHUNKS,
+            "no request asks for more than the batch limit"
+        );
+    }
+
+    assert_eq!(tokio::fs::read_to_string(base.dir.path().join("a.cook")).await.unwrap(), content_a);
+    assert_eq!(tokio::fs::read_to_string(base.dir.path().join("b.cook")).await.unwrap(), content_b);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_download_once_keeps_finished_batches_when_a_later_one_fails() {
+    let server = MockServer::start().await;
+
+    let lines = DOWNLOAD_BATCH_MAX_CHUNKS * 3 / 4;
+    let content_a = unique_lines("a", lines);
+    let content_b = unique_lines("b", lines);
+    let (ids_a, mut chunks) = text_chunks(&content_a).await;
+    let (ids_b, chunks_b) = text_chunks(&content_b).await;
+    chunks.extend(chunks_b);
+
+    // The server lists the newer record first: the client has to put them in
+    // order itself, or a failure would leave a gap below its resume point.
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 12, "path": "b.cook", "deleted": false, "chunk_ids": ids_b.join(",") },
+            { "id": 11, "path": "a.cook", "deleted": false, "chunk_ids": ids_a.join(",") }
+        ])))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(ChunkStore { chunks, fail_on: Some(ids_b[0].clone()) })
+        .mount(&server)
+        .await;
+
+    let base = common::client_base();
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
+    let result = check_download_once(&base.pool, Arc::clone(&chunker_arc), &remote, base.dir.path(), NS).await;
+    assert!(result.is_err(), "the failed batch is reported");
+
+    // The first batch is on disk and in the registry...
+    assert_eq!(tokio::fs::read_to_string(base.dir.path().join("a.cook")).await.unwrap(), content_a);
+    assert!(!base.dir.path().join("b.cook").exists(), "the failed batch wrote nothing");
+
+    // ...so the next attempt asks the server only for what is still missing.
+    let conn = &mut get_connection(&base.pool).expect("checkout");
+    assert_eq!(registry::latest_jid(conn, NS).expect("latest_jid"), 11);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn check_download_once_asks_for_a_repeated_chunk_once() {
+    let server = MockServer::start().await;
+
+    // Three identical lines are one chunk, used three times.
+    let content = "salt\nsalt\nsalt\n";
+    let (ids, chunks) = text_chunks(content).await;
+    assert_eq!(ids.len(), 3);
+
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 11, "path": "a.cook", "deleted": false, "chunk_ids": ids.join(",") }
+        ])))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(ChunkStore { chunks, fail_on: None })
+        .mount(&server)
+        .await;
+
+    let base = common::client_base();
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let chunker_arc = Arc::new(Mutex::new(base.chunker));
+    check_download_once(&base.pool, Arc::clone(&chunker_arc), &remote, base.dir.path(), NS)
+        .await
+        .expect("check_download_once");
+
+    let requests = download_requests(&server).await;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requested_chunk_ids(&requests[0]).len(), 1, "the chunk is requested once");
+    assert_eq!(tokio::fs::read_to_string(base.dir.path().join("a.cook")).await.unwrap(), content);
+}
+
+// ---------------------------------------------------------------------------
+// Stopping a download in flight
+// ---------------------------------------------------------------------------
+
+use cooklang_sync_client::models::SyncStatus;
+use cooklang_sync_client::syncer;
+use cooklang_sync_client::SyncStatusListener;
+use std::time::{Duration, Instant};
+use tokio_util::sync::CancellationToken;
+
+#[derive(Default)]
+struct RecordingListener {
+    statuses: std::sync::Mutex<Vec<SyncStatus>>,
+}
+
+impl SyncStatusListener for RecordingListener {
+    fn on_status_changed(&self, status: SyncStatus) {
+        self.statuses.lock().unwrap().push(status);
+    }
+
+    fn on_complete(&self, _success: bool, _message: Option<String>) {}
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_stops_a_download_in_flight_without_reporting_idle() {
+    let server = MockServer::start().await;
+
+    let (ids, _) = text_chunks("Eggs\n").await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 11, "path": "a.cook", "deleted": false, "chunk_ids": ids.join(",") }
+        ])))
+        .mount(&server)
+        .await;
+    // A download that hangs: nothing arrives for far longer than the test runs.
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(120)))
+        .mount(&server)
+        .await;
+
+    let base = common::client_base();
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let token = CancellationToken::new();
+    let listener = Arc::new(RecordingListener::default());
+    let (_tx, rx) = futures::channel::mpsc::channel(1);
+
+    let stopper = token.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        stopper.cancel();
+    });
+
+    let started = Instant::now();
+    let result = tokio::time::timeout(
+        Duration::from_secs(10),
+        syncer::run(
+            token,
+            Some(listener.clone() as Arc<dyn SyncStatusListener>),
+            &base.pool,
+            base.dir.path(),
+            NS,
+            base.chunker,
+            &remote,
+            rx,
+            true,
+        ),
+    )
+    .await
+    .expect("a stopped run returns promptly, not when the download times out");
+
+    assert!(result.is_ok(), "stopping is not an error: {result:?}");
+    assert!(started.elapsed() < Duration::from_secs(5));
+
+    let statuses = listener.statuses.lock().unwrap();
+    assert!(
+        !statuses.iter().any(|s| matches!(s, SyncStatus::Idle)),
+        "an unfinished download must not be reported as done: {statuses:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Downloads go first
+// ---------------------------------------------------------------------------
+
+/// Answers like `inner` and notes when it was asked.
+struct Timed<R: Respond> {
+    inner: R,
+    asked_at: Arc<std::sync::Mutex<Option<Instant>>>,
+}
+
+impl<R: Respond> Respond for Timed<R> {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        self.asked_at.lock().unwrap().get_or_insert_with(Instant::now);
+        self.inner.respond(request)
+    }
+}
+
+/// Answers like `inner`, after a pause.
+struct Delayed<R: Respond> {
+    inner: R,
+    delay: Duration,
+}
+
+impl<R: Respond> Respond for Delayed<R> {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        self.inner.respond(request).set_delay(self.delay)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_commits_local_changes_only_after_the_download_has_finished() {
+    // Two batches, each longer than the upload loop's start-up wait: an
+    // upload that did not wait for the whole download would slip in between
+    // them.
+    const BATCH_TAKES: Duration = Duration::from_secs(6);
+
+    let server = MockServer::start().await;
+
+    let lines = DOWNLOAD_BATCH_MAX_CHUNKS * 3 / 4;
+    let (ids_a, mut chunks) = text_chunks(&unique_lines("a", lines)).await;
+    let (ids_b, chunks_b) = text_chunks(&unique_lines("b", lines)).await;
+    chunks.extend(chunks_b);
+
+    Mock::given(method("GET"))
+        .and(path("/metadata/list"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "id": 11, "path": "a.cook", "deleted": false, "chunk_ids": ids_a.join(",") },
+            { "id": 12, "path": "b.cook", "deleted": false, "chunk_ids": ids_b.join(",") }
+        ])))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/metadata/poll"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(60)))
+        .mount(&server)
+        .await;
+
+    let download_asked_at = Arc::new(std::sync::Mutex::new(None));
+    Mock::given(method("POST"))
+        .and(path("/chunks/download"))
+        .respond_with(Timed {
+            inner: Delayed { inner: ChunkStore { chunks, fail_on: None }, delay: BATCH_TAKES },
+            asked_at: Arc::clone(&download_asked_at),
+        })
+        .mount(&server)
+        .await;
+
+    let commit_asked_at = Arc::new(std::sync::Mutex::new(None));
+    Mock::given(method("POST"))
+        .and(path("/metadata/commit"))
+        .respond_with(Timed {
+            inner: ResponseTemplate::new(200).set_body_json(serde_json::json!({ "Success": 100 })),
+            asked_at: Arc::clone(&commit_asked_at),
+        })
+        .mount(&server)
+        .await;
+
+    // A local file waiting to be uploaded.
+    let base = common::client_base();
+    tokio::fs::write(base.dir.path().join("local.cook"), b"Milk\n").await.unwrap();
+    {
+        let conn = &mut get_connection(&base.pool).expect("checkout");
+        registry::create(conn, &[sample_create("local.cook", 5)]).expect("create");
+    }
+
+    let remote = Remote::new(&server.uri(), TOKEN);
+    let token = CancellationToken::new();
+    let (_tx, rx) = futures::channel::mpsc::channel(1);
+
+    let stopper = token.clone();
+    let committed = Arc::clone(&commit_asked_at);
+    tokio::spawn(async move {
+        // Stop once the commit has been seen, or give up.
+        for _ in 0..250 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            if committed.lock().unwrap().is_some() {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        stopper.cancel();
+    });
+
+    syncer::run(token, None, &base.pool, base.dir.path(), NS, base.chunker, &remote, rx, false)
+        .await
+        .expect("run");
+
+    let download_asked_at = download_asked_at.lock().unwrap().expect("the download was requested");
+    let commit_asked_at = commit_asked_at.lock().unwrap().expect("the local file was committed");
+    assert!(
+        commit_asked_at >= download_asked_at + 2 * BATCH_TAKES,
+        "committed {:?} after the download started; both batches take {:?}",
+        commit_asked_at.duration_since(download_asked_at),
+        2 * BATCH_TAKES
+    );
+}

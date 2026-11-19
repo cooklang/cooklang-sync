@@ -24,6 +24,7 @@ diesel_migrations = { version = "2.3", features = ["sqlite"] }
 env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
 futures = "0.3"
 log = "0.4"
+memchr = "2"
 notify = "8.2"
 notify-debouncer-mini = "0.7"
 quick_cache = "0.7.0"

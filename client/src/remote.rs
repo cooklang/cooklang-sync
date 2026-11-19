@@ -21,6 +21,11 @@ const CLIENT_VERSION_HEADER: &str = "x-client-version";
 type Result<T, E = SyncError> = std::result::Result<T, E>;
 
 pub const REQUEST_TIMEOUT_SECS: u64 = 60;
+/// A chunk download carries file content, so how long it takes depends on
+/// the connection, not on the server. It gets a limit of its own: long enough
+/// for one batch on a slow mobile link, still finite so a dead connection is
+/// noticed.
+pub const DOWNLOAD_TIMEOUT_SECS: u64 = 300;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ResponseFileRecord {
@@ -300,6 +305,7 @@ impl Remote {
                 .client
                 .post(self.api_endpoint.clone() + "/chunks/download")
                 .headers(self.auth_headers())
+                .timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
                 .form(&params)
                 .send()
                 .await?;
@@ -326,18 +332,14 @@ impl Remote {
                     let boundary_bytes = format!("--{}", boundary).into_bytes();
 
                     let mut stream = response.bytes_stream();
-                    let mut buffer = Vec::new();
+                    let mut parser = MultipartParser::new(boundary_bytes);
 
                     while let Some(chunk) = stream.next().await {
-                        let chunk = chunk?;
-                        buffer.extend_from_slice(&chunk);
+                        parser.push(&chunk?);
 
                         // Process complete parts from buffer
-                        while let Some((part, remaining)) = extract_next_part(&buffer, &boundary_bytes)? {
-                            if let Some((chunk_id, content)) = process_part(&part)? {
-                                yield (chunk_id, content);
-                            }
-                            buffer = remaining;
+                        while let Some((chunk_id, content)) = parser.next_part()? {
+                            yield (chunk_id, content);
                         }
                     }
                 }
@@ -349,19 +351,74 @@ impl Remote {
     }
 }
 
-// Helper function to extract the next complete part from the buffer
-fn extract_next_part(buffer: &[u8], boundary: &[u8]) -> Result<Option<(Vec<u8>, Vec<u8>)>> {
-    if let Some(start) = find_boundary(buffer, boundary) {
-        if let Some(next_boundary) = find_boundary(&buffer[start + boundary.len()..], boundary) {
-            let part =
-                buffer[start + boundary.len()..start + boundary.len() + next_boundary].to_vec();
-            let remaining = buffer[start + boundary.len() + next_boundary..].to_vec();
-            Ok(Some((part, remaining)))
-        } else {
-            Ok(None) // Need more data
+/// Cuts a multipart response into its parts as the bytes arrive.
+///
+/// The response for one batch can be megabytes long and arrives in reads of a
+/// few kilobytes, so the parser remembers how far it has already looked for
+/// the next boundary: every byte is searched once, however many reads a part
+/// is spread over.
+struct MultipartParser {
+    boundary: Vec<u8>,
+    buffer: Vec<u8>,
+    /// How much of `buffer` is known not to contain the start of the
+    /// boundary that ends the current part.
+    searched: usize,
+}
+
+impl MultipartParser {
+    fn new(boundary: Vec<u8>) -> Self {
+        Self {
+            boundary,
+            buffer: Vec::new(),
+            searched: 0,
         }
-    } else {
-        Ok(None) // Need more data
+    }
+
+    fn push(&mut self, data: &[u8]) {
+        self.buffer.extend_from_slice(data);
+    }
+
+    /// The next complete part, or `None` when more data is needed.
+    fn next_part(&mut self) -> Result<Option<(String, Vec<u8>)>> {
+        let boundary_len = self.boundary.len();
+
+        loop {
+            // A part starts right after a boundary: drop whatever precedes
+            // the first one.
+            if !self.buffer.starts_with(&self.boundary) {
+                match find_boundary(&self.buffer, &self.boundary) {
+                    Some(start) => {
+                        self.buffer.drain(..start);
+                        self.searched = 0;
+                    }
+                    None => return Ok(None),
+                }
+            }
+
+            let from = self.searched.max(boundary_len);
+            if self.buffer.len() < from {
+                return Ok(None);
+            }
+
+            match find_boundary(&self.buffer[from..], &self.boundary) {
+                Some(offset) => {
+                    let end = from + offset;
+                    let part = process_part(&self.buffer[boundary_len..end])?;
+                    self.buffer.drain(..end);
+                    self.searched = 0;
+
+                    if part.is_some() {
+                        return Ok(part);
+                    }
+                }
+                None => {
+                    // The boundary may be cut in half by the end of the
+                    // buffer: look at its last bytes again next time.
+                    self.searched = (self.buffer.len() + 1).saturating_sub(boundary_len);
+                    return Ok(None);
+                }
+            }
+        }
     }
 }
 
@@ -391,11 +448,81 @@ fn process_part(part: &[u8]) -> Result<Option<(String, Vec<u8>)>> {
 
 // Helper function to find boundary in buffer
 fn find_boundary(data: &[u8], boundary: &[u8]) -> Option<usize> {
-    data.windows(boundary.len())
-        .position(|window| window == boundary)
+    memchr::memmem::find(data, boundary)
 }
 
 // Helper function to find double CRLF
 fn find_double_crlf(data: &[u8]) -> Option<usize> {
     data.windows(4).position(|window| window == b"\r\n\r\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BOUNDARY: &[u8] = b"--bound";
+
+    fn body(parts: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut body = Vec::new();
+        for (id, content) in parts {
+            body.extend_from_slice(BOUNDARY);
+            body.extend_from_slice(format!("\r\nX-Chunk-ID: {id}\r\nContent-Type: text/plain\r\n\r\n").as_bytes());
+            body.extend_from_slice(content);
+            body.extend_from_slice(b"\r\n");
+        }
+        body.extend_from_slice(BOUNDARY);
+        body.extend_from_slice(b"--\r\n");
+        body
+    }
+
+    /// Feeds `body` to a parser `step` bytes at a time and collects the parts.
+    fn parse(body: &[u8], step: usize) -> Vec<(String, Vec<u8>)> {
+        let mut parser = MultipartParser::new(BOUNDARY.to_vec());
+        let mut parts = Vec::new();
+        for piece in body.chunks(step) {
+            parser.push(piece);
+            while let Some(part) = parser.next_part().expect("well-formed body") {
+                parts.push(part);
+            }
+        }
+        parts
+    }
+
+    #[test]
+    fn multipart_parser_yields_each_part_whatever_the_read_size() {
+        let binary: Vec<u8> = (0..5000u32).map(|i| (i % 251) as u8).collect();
+        let parts: Vec<(&str, &[u8])> = vec![
+            ("c1", b"Eggs\n"),
+            ("c2", b""),
+            ("c3", b"two\r\n\r\nblank lines and a -- dash --boun lookalike"),
+            ("c4", &binary),
+        ];
+        let body = body(&parts);
+
+        // Read sizes from one byte to the whole body: a boundary gets cut at
+        // every possible place.
+        for step in [1, 2, 3, 7, 8, 64, 4096, body.len()] {
+            let parsed = parse(&body, step);
+            let expected: Vec<(String, Vec<u8>)> =
+                parts.iter().map(|(id, c)| (id.to_string(), c.to_vec())).collect();
+            assert_eq!(parsed, expected, "read size {step}");
+        }
+    }
+
+    #[test]
+    fn multipart_parser_waits_for_the_closing_boundary() {
+        let mut parser = MultipartParser::new(BOUNDARY.to_vec());
+        parser.push(b"--bound\r\nX-Chunk-ID: c1\r\n\r\nEggs\n\r\n--bou");
+        assert!(parser.next_part().unwrap().is_none(), "the part is not closed yet");
+        parser.push(b"nd--\r\n");
+        assert_eq!(parser.next_part().unwrap(), Some(("c1".to_string(), b"Eggs\n".to_vec())));
+        assert!(parser.next_part().unwrap().is_none());
+    }
+
+    #[test]
+    fn multipart_parser_reports_a_part_without_a_chunk_id() {
+        let mut parser = MultipartParser::new(BOUNDARY.to_vec());
+        parser.push(b"--bound\r\nContent-Type: text/plain\r\n\r\nEggs\n\r\n--bound--\r\n");
+        assert!(matches!(parser.next_part(), Err(SyncError::BatchDownloadError(_))));
+    }
 }

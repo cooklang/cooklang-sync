@@ -111,7 +111,14 @@ fn filter_eligible(p: &Path) -> bool {
     if p.is_symlink() {
         return false;
     }
-    chunker::is_text(p) || chunker::is_binary(p)
+    let eligible = chunker::is_text(p) || chunker::is_binary(p);
+    if !eligible && p.is_file() {
+        debug!(
+            "not syncing {:?}: file type is not on the sync allowlist",
+            p
+        );
+    }
+    eligible
 }
 
 fn is_dot_dir(e: &walkdir::DirEntry) -> bool {

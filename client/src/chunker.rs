@@ -263,14 +263,20 @@ impl InMemoryCache {
     }
 }
 
-pub fn is_binary(p: &Path) -> bool {
-    if let Some(ext) = p.extension() {
-        let ext = ext.to_ascii_lowercase();
+/// Image extensions synced as opaque binary blobs, matched in any ASCII case.
+/// HEIC/HEIF is the iPhone camera default; WebP and AVIF are what most recipe
+/// sites serve.
+pub const BINARY_EXTENSIONS: [&str; 8] =
+    ["jpg", "jpeg", "png", "webp", "heic", "heif", "avif", "gif"];
 
-        ext == "jpg" || ext == "jpeg" || ext == "png"
-    } else {
-        false
-    }
+pub fn is_binary(p: &Path) -> bool {
+    p.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            BINARY_EXTENSIONS
+                .iter()
+                .any(|b| ext.eq_ignore_ascii_case(b))
+        })
 }
 
 pub fn is_text(p: &Path) -> bool {
@@ -336,6 +342,33 @@ mod tests {
     fn test_is_binary_with_png() {
         let path = Path::new("image.png");
         assert!(is_binary(path));
+    }
+
+    #[test]
+    fn test_is_binary_with_new_image_formats_in_any_case() {
+        for name in [
+            "photo.heic",
+            "photo.HEIC",
+            "photo.heif",
+            "photo.HeIf",
+            "photo.webp",
+            "photo.WEBP",
+            "photo.avif",
+            "photo.AVIF",
+            "photo.gif",
+            "photo.GIF",
+            "photo.JPG",
+            "photo.Png",
+        ] {
+            assert!(is_binary(Path::new(name)), "{name} should be binary");
+        }
+    }
+
+    #[test]
+    fn test_is_binary_rejects_other_files() {
+        for name in ["photo", "photo.tiff", "photo.heic.txt", "heic", ".heic"] {
+            assert!(!is_binary(Path::new(name)), "{name} should not be binary");
+        }
     }
 
     #[test]

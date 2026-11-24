@@ -155,3 +155,35 @@ mod async_property_tests {
         }
     }
 }
+
+/// A `.heic` photo hashified on one client is rebuilt byte-for-byte on another
+/// client from the chunks alone, the way they travel through the server.
+#[tokio::test]
+async fn heic_round_trips_between_two_clients() {
+    // An ftyp box like an iPhone's, then enough bytes to span several chunks.
+    let mut photo = b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00mif1heic".to_vec();
+    photo.extend((0..3 * 1024 * 1024).map(|i: u32| (i % 251) as u8));
+
+    let dir_a = TempDir::new().unwrap();
+    let cache_a = InMemoryCache::new(1000, 100_000_000);
+    let mut client_a = Chunker::new(cache_a, dir_a.path().to_path_buf());
+    create_test_file(&dir_a, "IMG_0001.HEIC", &photo).await;
+    let hashes = client_a.hashify("IMG_0001.HEIC").await.unwrap();
+    assert!(hashes.len() > 1, "a 3 MB photo spans several chunks");
+
+    let dir_b = TempDir::new().unwrap();
+    let cache_b = InMemoryCache::new(1000, 100_000_000);
+    let mut client_b = Chunker::new(cache_b, dir_b.path().to_path_buf());
+    for hash in &hashes {
+        assert!(!client_b.check_chunk(hash));
+        let chunk = client_a.read_chunk(hash).unwrap();
+        client_b.save_chunk(hash, chunk).unwrap();
+    }
+    let hash_refs = hashes.iter().map(String::as_str).collect();
+    client_b.save("IMG_0001.HEIC", hash_refs).await.unwrap();
+
+    let received = tokio::fs::read(dir_b.path().join("IMG_0001.HEIC"))
+        .await
+        .unwrap();
+    assert_eq!(received, photo);
+}

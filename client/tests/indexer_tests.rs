@@ -143,6 +143,8 @@ fn check_index_once_skips_ineligible_files_and_recurses_into_subdirs() {
     write(&storage, "top.cook", b"a");
     write(&storage, "nested/dir/inner.md", b"b");
     write(&storage, "photo.jpg", &[0xff, 0xd8, 0xff]);
+    write(&storage, "IMG_0001.HEIC", b"ftypheic");
+    write(&storage, "web.webp", b"RIFF");
     // ineligible extensions:
     write(&storage, "notes.txt", b"c");
     write(&storage, "script.rs", b"d");
@@ -157,9 +159,11 @@ fn check_index_once_skips_ineligible_files_and_recurses_into_subdirs() {
         .collect();
     paths.sort();
     assert_eq!(paths, vec![
+        "IMG_0001.HEIC".to_string(),
         "nested/dir/inner.md".to_string(),
         "photo.jpg".to_string(),
         "top.cook".to_string(),
+        "web.webp".to_string(),
     ]);
 }
 
